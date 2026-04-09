@@ -9,8 +9,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Reference Include="protoip">
-      <HintPath>..\libs\protoip.dll</HintPath>
+    <ProjectReference Include="..\Shared\Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="ProtocolSI">
+      <HintPath>..\libs\ProtocolSI.dll</HintPath>
     </Reference>
   </ItemGroup>
 
