@@ -9,7 +9,7 @@ namespace Server.PacketHandlers
     {
         public ProtocolSICmdType CommandType => ProtocolSICmdType.USER_OPTION_1;
 
-        public Task HandleAsync(TcpClient client, byte[] data, int bytesRead)
+        public async Task HandleAsync(TcpClient client, byte[] data, int bytesRead)
         {
             if (!Program.ConnectedClients.TryGetValue(client, out var session))
             {
@@ -18,12 +18,32 @@ namespace Server.PacketHandlers
 
             (byte[] aesKey, byte[] aesIv) = session;
 
+            // Decrypt the received registration data using AES
+
             byte[] decryptedData = AesUtils.Decrypt(data, aesKey, aesIv);
-            string message = Encoding.UTF8.GetString(decryptedData);
+            string registrationData = Encoding.UTF8.GetString(decryptedData);
 
-            Console.WriteLine("[Server] Received register message: " + message);
+            string[] parts = registrationData.Split(":");
+            string username = parts[0];
+            string password = parts[1];
 
-            return Task.CompletedTask;
+            Console.WriteLine("[Server] Received register message: " + registrationData);
+
+            // Send the ACK response back to the client
+            // TODO: Implement proper authentication and registration logic
+
+            ProtocolSI protocol = new();
+            NetworkStream stream = client.GetStream();
+
+            string ackResponse = $"Registration successful for user: {username}";
+            byte[] ackData = Encoding.UTF8.GetBytes(ackResponse);
+
+            byte[] encryptedData = AesUtils.Encrypt(ackData, aesKey, aesIv);
+            byte[] packet = protocol.Make(ProtocolSICmdType.ACK, encryptedData);
+
+            await stream.WriteAsync(packet);
+
+            Console.WriteLine("[Server] Sent ACK response to client: " + ackResponse);
         }
     }
 }

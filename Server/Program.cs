@@ -1,5 +1,6 @@
 ﻿using EI.SI;
 using Server.PacketHandlers;
+using Shared;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
@@ -80,14 +81,32 @@ namespace Server
             }
         }
 
-        private static void SendRsaPublicKey(TcpClient client, ProtocolSI protocol, NetworkStream stream)
+        public static async void SendEncryptedPacket(TcpClient client, byte[] data, ProtocolSICmdType commandType)
+        {
+            if (!ConnectedClients.TryGetValue(client, out var session))
+            {
+                throw new Exception($"Client handshake was not sucessful for: {client.Client.RemoteEndPoint}");
+            }
+
+            ProtocolSI protocol = new();
+            NetworkStream stream = client.GetStream();
+
+            (byte[] aesKey, byte[] aesIv) = session;
+
+            byte[] encryptedData = AesUtils.Encrypt(data, aesKey, aesIv);
+            byte[] packet = protocol.Make(commandType, encryptedData);
+
+            await stream.WriteAsync(packet);
+        }
+
+        private static async void SendRsaPublicKey(TcpClient client, ProtocolSI protocol, NetworkStream stream)
         {
             string publicKey = Convert.ToBase64String(Rsa.ExportRSAPublicKey());
 
             byte[] keyData = Encoding.UTF8.GetBytes(publicKey);
             byte[] keyPacket = protocol.Make(ProtocolSICmdType.PUBLIC_KEY, keyData);
 
-            stream.Write(keyPacket, 0, keyPacket.Length);
+            await stream.WriteAsync(keyPacket);
 
             Console.WriteLine($"[Server] Sent public key to {client.Client.RemoteEndPoint}");
         }

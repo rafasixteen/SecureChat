@@ -204,6 +204,8 @@
             Margin = new Padding(3, 4, 3, 4);
             Name = "RegisterForm";
             Text = "RegisterForm";
+            FormClosed += RegisterForm_FormClosed;
+            Load += RegisterForm_Load;
             ResumeLayout(false);
             PerformLayout();
         }

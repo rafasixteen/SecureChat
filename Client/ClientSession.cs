@@ -6,13 +6,17 @@ using System.Text;
 
 namespace Client
 {
-    public class ClientSession : IDisposable
+    public class ClientSession
     {
         private TcpClient _client;
 
         private NetworkStream _stream;
 
         private ProtocolSI _protocol;
+
+        private readonly Dictionary<ProtocolSICmdType, Action<byte[]>> _handlers;
+
+        private CancellationTokenSource _listenerCts;
 
         private byte[]? _aesKey;
 
@@ -21,8 +25,12 @@ namespace Client
         public ClientSession(string serverIp, int serverPort)
         {
             _client = new TcpClient(serverIp, serverPort);
+
             _stream = _client.GetStream();
             _protocol = new ProtocolSI();
+
+            _handlers = new();
+            _listenerCts = new();
         }
 
         public async Task PerformHandshake()
@@ -49,6 +57,56 @@ namespace Client
             Console.WriteLine("[Client] Handshake complete (AES key exchanged)");
         }
 
+        public void SendEncryptedPacket(byte[] data, ProtocolSICmdType commandType)
+        {
+            if (_aesKey == null || _aesIv == null)
+                throw new InvalidOperationException("AES key not established.");
+
+            byte[] encryptedData = AesUtils.Encrypt(data, _aesKey, _aesIv);
+            byte[] packet = _protocol.Make(commandType, encryptedData);
+
+            _stream.Write(packet, 0, packet.Length);
+        }
+
+        public void On(ProtocolSICmdType cmdType, Action<byte[]> handler)
+        {
+            _handlers[cmdType] = handler;
+        }
+
+        public void ClearHandlers()
+        {
+            _handlers.Clear();
+        }
+
+        public void StartListening()
+        {
+            _listenerCts = new CancellationTokenSource();
+            Task.Run(() => ListenLoop(_listenerCts.Token));
+        }
+
+        public void StopListening()
+        {
+            _listenerCts?.Cancel();
+        }
+
+        private async Task ListenLoop(CancellationToken token)
+        {
+            while (!token.IsCancellationRequested)
+            {
+                int bytesRead = await _stream.ReadAsync(_protocol.Buffer.AsMemory(0, _protocol.Buffer.Length), token);
+
+                // Server disconnected
+                if (bytesRead == 0)
+                    break;
+
+                ProtocolSICmdType cmdType = _protocol.GetCmdType();
+                byte[] data = _protocol.GetData();
+
+                if (_handlers.TryGetValue(cmdType, out Action<byte[]>? handler))
+                    handler.Invoke(data);
+            }
+        }
+
         private async Task<string> ReceiveServerPublicKey()
         {
             int bytesRead = await _stream.ReadAsync(_protocol.Buffer.AsMemory(0, _protocol.Buffer.Length));
@@ -63,23 +121,6 @@ namespace Client
 
             byte[] data = _protocol.GetData();
             return Encoding.UTF8.GetString(data);
-        }
-
-        public void SendMessage(string message, ProtocolSICmdType cmdType)
-        {
-            if (_aesKey == null || _aesIv == null)
-                throw new InvalidOperationException("AES key not established.");
-
-            byte[] encryptedData = AesUtils.Encrypt(message, _aesKey, _aesIv);
-            byte[] packet = _protocol.Make(cmdType, encryptedData);
-
-            _stream.Write(packet, 0, packet.Length);
-        }
-
-        public void Dispose()
-        {
-            _stream.Close();
-            _client.Close();
         }
     }
 }
