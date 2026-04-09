@@ -1,7 +1,4 @@
-﻿using System.Net.Sockets;
-using EI.SI;
-
-namespace Client.Forms
+﻿namespace Client.Forms
 {
     public partial class RegisterForm : Form
     {
@@ -23,8 +20,8 @@ namespace Client.Forms
 
             string username = _textBoxUsername.Text;
             string password = txtbx_password.Text;
-            
-            session.SendMessage($"{username}:{password}", ProtocolSICmdType.DATA);
+
+            session.SendMessage($"{username}:{password}", EI.SI.ProtocolSICmdType.USER_OPTION_1);
         }
 
         private void ListenForServerMessages()

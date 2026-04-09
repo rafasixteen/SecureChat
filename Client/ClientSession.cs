@@ -62,12 +62,10 @@ namespace Client
                 throw new Exception("Expected public key from server.");
 
             byte[] data = _protocol.GetData();
-            string publicKey = Encoding.UTF8.GetString(data);
-
-            return publicKey;
+            return Encoding.UTF8.GetString(data);
         }
 
-        public void SendMessage(string message, ProtocolSICmdType cmdType = ProtocolSICmdType.SYM_CIPHER_DATA)
+        public void SendMessage(string message, ProtocolSICmdType cmdType)
         {
             if (_aesKey == null || _aesIv == null)
                 throw new InvalidOperationException("AES key not established.");
