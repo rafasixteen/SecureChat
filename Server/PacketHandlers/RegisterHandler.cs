@@ -1,7 +1,11 @@
 ﻿using EI.SI;
+using Microsoft.EntityFrameworkCore;
+using Server.Data;
+using Server.Data.Models;
+using Server.Utils;
 using Shared;
+using Shared.DTOs;
 using System.Net.Sockets;
-using System.Text;
 
 namespace Server.PacketHandlers
 {
@@ -9,41 +13,63 @@ namespace Server.PacketHandlers
     {
         public ProtocolSICmdType CommandType => ProtocolSICmdType.USER_OPTION_1;
 
-        public async Task HandleAsync(TcpClient client, byte[] data, int bytesRead)
+        public async Task HandleAsync(TcpClient client, byte[] encrypted)
         {
-            if (!Program.ConnectedClients.TryGetValue(client, out var session))
+            (byte[] aesKey, byte[] aesIv) = Program.GetClientKeys(client);
+
+            byte[] decrypted = AesUtils.Decrypt(encrypted, aesKey, aesIv);
+            RegisterRequest request = Serializer.Deserialize<RegisterRequest>(decrypted);
+
+            if (!await ValidateInput(client, request))
+                return;
+
+            using AppDbContext db = new();
+
+            bool userExists = await db.Users.AnyAsync(u => u.Username == request.Username);
+
+            if (userExists)
             {
-                throw new Exception($"Client handshake was not sucessful for: {client.Client.RemoteEndPoint}");
+                await Program.SendPacketAsync(client, "Username already taken.", ProtocolSICmdType.NACK);
+                return;
             }
 
-            (byte[] aesKey, byte[] aesIv) = session;
+            (string hash, string salt) = Password.Hash(request.Password);
 
-            // Decrypt the received registration data using AES
+            db.Users.Add(new User()
+            {
+                Id = Guid.NewGuid(),
+                Username = request.Username,
+                PasswordHash = hash,
+                Salt = salt
+            });
 
-            byte[] decryptedData = AesUtils.Decrypt(data, aesKey, aesIv);
-            string registrationData = Encoding.UTF8.GetString(decryptedData);
+            await db.SaveChangesAsync();
 
-            string[] parts = registrationData.Split(":");
-            string username = parts[0];
-            string password = parts[1];
+            await Program.SendPacketAsync(client, "Registration successful.", ProtocolSICmdType.ACK);
+            Console.WriteLine($"[Server] User registered: {request.Username}");
+        }
 
-            Console.WriteLine("[Server] Received register message: " + registrationData);
+        private static async Task<bool> ValidateInput(TcpClient client, RegisterRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
+            {
+                await Program.SendPacketAsync(client, "Username and password are required.", ProtocolSICmdType.NACK);
+                return false;
+            }
 
-            // Send the ACK response back to the client
-            // TODO: Implement proper authentication and registration logic
+            if (request.Username.Length > 32)
+            {
+                await Program.SendPacketAsync(client, "Username must be 32 characters or fewer.", ProtocolSICmdType.NACK);
+                return false;
+            }
 
-            ProtocolSI protocol = new();
-            NetworkStream stream = client.GetStream();
+            if (request.Password.Length < 4)
+            {
+                await Program.SendPacketAsync(client, "Password must be at least 4 characters.", ProtocolSICmdType.NACK);
+                return false;
+            }
 
-            string ackResponse = $"Registration successful for user: {username}";
-            byte[] ackData = Encoding.UTF8.GetBytes(ackResponse);
-
-            byte[] encryptedData = AesUtils.Encrypt(ackData, aesKey, aesIv);
-            byte[] packet = protocol.Make(ProtocolSICmdType.ACK, encryptedData);
-
-            await stream.WriteAsync(packet);
-
-            Console.WriteLine("[Server] Sent ACK response to client: " + ackResponse);
+            return true;
         }
     }
 }

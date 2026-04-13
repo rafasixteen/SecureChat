@@ -7,6 +7,6 @@ namespace Server.PacketHandlers
     {
         ProtocolSICmdType CommandType { get; }
 
-        Task HandleAsync(TcpClient client, byte[] data, int bytesRead);
+        Task HandleAsync(TcpClient client, byte[] encrypted);
     }
 }

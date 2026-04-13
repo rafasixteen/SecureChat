@@ -4,57 +4,53 @@ using System.Text;
 
 namespace Client.Forms
 {
-    public partial class RegisterForm : Form
+    public partial class RegisterForm : AuthForm
     {
         public RegisterForm()
         {
             InitializeComponent();
         }
 
-        private void OnRegistrationSuccess(byte[] data)
-        {
-            Invoke(() =>
-           {
-               MessageBox.Show("Registration successful!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
-               Close();
-           });
-        }
-
         private void OnRegistrationFailed(byte[] data)
-        {   
+        {
             Invoke(() =>
             {
                 string message = Encoding.UTF8.GetString(data);
-                MessageBox.Show($"Registration failed: {message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             });
         }
 
-        private void ButtonRegister_Click(object sender, EventArgs e)
+        private async void ButtonRegister_Click(object sender, EventArgs e)
         {
-            ClientSession session = AppSession.Current.Ensure();
+            ClientConnection session = AppSession.Connection.Ensure();
 
-            string username = _textBoxUsername.Text;
-            string password = txtbx_password.Text;
+            string username = _usernameTextBox.Text;
+            string password = _passwordTextBox.Text;
 
-            session.SendRegistrationPacket(username, password);
+            await session.SendRegistrationPacketAsync(username, password);
         }
 
         private void RegisterForm_Load(object sender, EventArgs e)
         {
-            ClientSession session = AppSession.Current.Ensure();
+            ClientConnection connection = AppSession.Connection.Ensure();
 
-            session.On(ProtocolSICmdType.ACK, OnRegistrationSuccess);
-            session.On(ProtocolSICmdType.NACK, OnRegistrationFailed);
+            connection.On(ProtocolSICmdType.ACK, (_) => Invoke(Close));
+            connection.On(ProtocolSICmdType.NACK, OnRegistrationFailed);
 
-            session.StartListening();
+            connection.StartListening();
         }
 
         private void RegisterForm_FormClosed(object sender, FormClosedEventArgs e)
         {
-            ClientSession session = AppSession.Current.Ensure();
+            ClientConnection connection = AppSession.Connection.Ensure();
 
-            session.StopListening();
-            session.ClearHandlers();
+            connection.StopListening();
+            connection.ClearHandlers();
+        }
+
+        private void HaveAccountLinkLabel_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
+        {
+            SwitchToOther();
         }
     }
 }

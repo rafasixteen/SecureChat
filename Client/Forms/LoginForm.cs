@@ -1,53 +1,65 @@
-﻿namespace Client.Forms
-{
-    public partial class LoginForm : Form
-    {
-        // IMPORTANTE
-        // O login form é o primeiro formulário, ou seja, este está sempre aberto, apenas é escondido quando necessário.
+﻿using Client.Extensions;
+using EI.SI;
+using System.Text;
 
-        // O login Form apenas tem a função initialize por isso não precisa de chavetas
+namespace Client.Forms
+{
+    public partial class LoginForm : AuthForm
+    {
         public LoginForm()
         {
             InitializeComponent();
         }
 
-        private async void LoginForm_Load(object sender, EventArgs e)
+        private void OnLoginSuccess(byte[] data)
         {
-            try
+            Invoke(() =>
             {
-                ClientSession session = new("127.0.0.1", 8080);
-
-                await session.PerformHandshake();
-
-                AppSession.Current = session;
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Connection error: " + ex.Message);
-            }
+                MessageBox.Show("Login successful!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                Close();
+            });
         }
 
-        // Quando se clica na link label do registo, abre-se o formulário de registo, o LoginForm Desaparece, ou seja é "Hidden"
-        private void lnklbl_go_register_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
+        private void OnLoginFailed(byte[] data)
         {
-            // Esconde o login form
-            Hide();
-
-            // Criar Instância do formulário de registo
-            RegisterForm registerForm = new RegisterForm();
-
-            // Quando o formulário de registo é fechado, o login volta a aparecer, ou seja, é "Shown"
-            // FormClosed é um evento que podemos usar para executar código
-            registerForm.FormClosed += (s, args) => Show();
-
-            // Mostrar o formulário de registo
-            registerForm.Show();
+            Invoke(() =>
+            {
+                string message = Encoding.UTF8.GetString(data);
+                MessageBox.Show($"Login failed: {message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            });
         }
 
-        // Quando se clica no botão de login, o formulário
-        private void btn_login_Click(object sender, EventArgs e)
+        private async void LoginButton_Click(object sender, EventArgs e)
         {
+            ClientConnection connection = AppSession.Connection.Ensure();
 
+            string username = _textBoxUsername.Text;
+            string password = _textBoxPassword.Text;
+
+            await connection.SendLoginPacketAsync(username, password);
+        }
+
+        private void LoginForm_Load(object sender, EventArgs e)
+        {
+            ClientConnection connection = AppSession.Connection.Ensure();
+
+            connection.On(ProtocolSICmdType.ACK, OnLoginSuccess);
+            connection.On(ProtocolSICmdType.NACK, OnLoginFailed);
+
+            connection.StartListening();
+        }
+
+        private void LoginForm_FormClosed(object sender, FormClosedEventArgs e)
+        {
+            ClientConnection connection = AppSession.Connection.Ensure();
+
+            connection.StopListening();
+            connection.ClearHandlers();
+        }
+
+        private void CreateAccountLinkLabel_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
+        {
+            SwitchToOther();
         }
     }
 }

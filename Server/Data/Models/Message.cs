@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace SecureChat.Server.Data.Models
+namespace Server.Data.Models
 {
     public class Message
     {

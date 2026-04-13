@@ -5,14 +5,14 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
-using SecureChat.Server.Data;
+using Server.Data;
 
 #nullable disable
 
 namespace Server.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260407153127_InitialCreate")]
+    [Migration("20260412195332_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -25,7 +25,7 @@ namespace Server.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
-            modelBuilder.Entity("SecureChat.Server.Data.Models.Message", b =>
+            modelBuilder.Entity("Server.Data.Models.Message", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -57,7 +57,7 @@ namespace Server.Migrations
                     b.ToTable("Messages");
                 });
 
-            modelBuilder.Entity("SecureChat.Server.Data.Models.User", b =>
+            modelBuilder.Entity("Server.Data.Models.User", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -80,15 +80,15 @@ namespace Server.Migrations
                     b.ToTable("Users");
                 });
 
-            modelBuilder.Entity("SecureChat.Server.Data.Models.Message", b =>
+            modelBuilder.Entity("Server.Data.Models.Message", b =>
                 {
-                    b.HasOne("SecureChat.Server.Data.Models.User", "Receiver")
+                    b.HasOne("Server.Data.Models.User", "Receiver")
                         .WithMany("MessagesReceived")
                         .HasForeignKey("ReceiverId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("SecureChat.Server.Data.Models.User", "Sender")
+                    b.HasOne("Server.Data.Models.User", "Sender")
                         .WithMany("MessagesSent")
                         .HasForeignKey("SenderId")
                         .OnDelete(DeleteBehavior.Restrict)
@@ -99,7 +99,7 @@ namespace Server.Migrations
                     b.Navigation("Sender");
                 });
 
-            modelBuilder.Entity("SecureChat.Server.Data.Models.User", b =>
+            modelBuilder.Entity("Server.Data.Models.User", b =>
                 {
                     b.Navigation("MessagesReceived");
 

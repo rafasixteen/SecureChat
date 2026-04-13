@@ -28,80 +28,107 @@
         /// </summary>
         private void InitializeComponent()
         {
-            btn_send = new Button();
-            txtbx_message = new TextBox();
-            flp_chat = new FlowLayoutPanel();
-            lbl_username_receiver = new Label();
-            btn_exit = new Button();
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(ChatForm));
+            _sendButton = new Button();
+            _textBoxMessage = new TextBox();
+            _chat = new FlowLayoutPanel();
+            _usersListView = new ListView();
+            toolStrip1 = new ToolStrip();
+            toolStripButton1 = new ToolStripButton();
+            _loginButton = new ToolStripButton();
+            toolStrip1.SuspendLayout();
             SuspendLayout();
             // 
-            // btn_send
+            // _sendButton
             // 
-            btn_send.Location = new Point(643, 416);
-            btn_send.Name = "btn_send";
-            btn_send.Size = new Size(75, 23);
-            btn_send.TabIndex = 0;
-            btn_send.Text = "Enviar";
-            btn_send.UseVisualStyleBackColor = true;
+            _sendButton.Location = new Point(643, 416);
+            _sendButton.Name = "_sendButton";
+            _sendButton.Size = new Size(75, 23);
+            _sendButton.TabIndex = 0;
+            _sendButton.Text = "Enviar";
+            _sendButton.UseVisualStyleBackColor = true;
+            _sendButton.Click += SendButton_Click;
             // 
-            // txtbx_message
+            // _textBoxMessage
             // 
-            txtbx_message.Location = new Point(12, 416);
-            txtbx_message.Name = "txtbx_message";
-            txtbx_message.Size = new Size(625, 23);
-            txtbx_message.TabIndex = 1;
+            _textBoxMessage.Location = new Point(129, 416);
+            _textBoxMessage.Name = "_textBoxMessage";
+            _textBoxMessage.Size = new Size(508, 23);
+            _textBoxMessage.TabIndex = 1;
             // 
-            // flp_chat
+            // _chat
             // 
-            flp_chat.AutoScroll = true;
-            flp_chat.FlowDirection = FlowDirection.TopDown;
-            flp_chat.Location = new Point(12, 42);
-            flp_chat.Name = "flp_chat";
-            flp_chat.Size = new Size(706, 368);
-            flp_chat.TabIndex = 2;
+            _chat.AutoScroll = true;
+            _chat.FlowDirection = FlowDirection.TopDown;
+            _chat.Location = new Point(129, 27);
+            _chat.Name = "_chat";
+            _chat.Size = new Size(589, 383);
+            _chat.TabIndex = 2;
             // 
-            // lbl_username_receiver
+            // _usersListView
             // 
-            lbl_username_receiver.AutoSize = true;
-            lbl_username_receiver.Font = new Font("Segoe UI", 16F);
-            lbl_username_receiver.Location = new Point(12, 9);
-            lbl_username_receiver.Name = "lbl_username_receiver";
-            lbl_username_receiver.Size = new Size(98, 30);
-            lbl_username_receiver.TabIndex = 3;
-            lbl_username_receiver.Text = "No User!";
+            _usersListView.Location = new Point(2, 27);
+            _usersListView.Name = "_usersListView";
+            _usersListView.Size = new Size(121, 412);
+            _usersListView.TabIndex = 3;
+            _usersListView.UseCompatibleStateImageBehavior = false;
             // 
-            // btn_exit
+            // toolStrip1
             // 
-            btn_exit.Font = new Font("Segoe UI", 11F);
-            btn_exit.Location = new Point(608, 9);
-            btn_exit.Name = "btn_exit";
-            btn_exit.Size = new Size(110, 27);
-            btn_exit.TabIndex = 4;
-            btn_exit.Text = "Sair do Chat";
-            btn_exit.UseVisualStyleBackColor = true;
+            toolStrip1.Items.AddRange(new ToolStripItem[] { toolStripButton1, _loginButton });
+            toolStrip1.Location = new Point(0, 0);
+            toolStrip1.Name = "toolStrip1";
+            toolStrip1.Size = new Size(730, 25);
+            toolStrip1.TabIndex = 4;
+            toolStrip1.Text = "toolStrip1";
+            // 
+            // toolStripButton1
+            // 
+            toolStripButton1.DisplayStyle = ToolStripItemDisplayStyle.Text;
+            toolStripButton1.Image = (Image)resources.GetObject("toolStripButton1.Image");
+            toolStripButton1.ImageTransparentColor = Color.Magenta;
+            toolStripButton1.Name = "toolStripButton1";
+            toolStripButton1.Size = new Size(69, 22);
+            toolStripButton1.Text = "Add Friend";
+            // 
+            // _loginButton
+            // 
+            _loginButton.DisplayStyle = ToolStripItemDisplayStyle.Text;
+            _loginButton.Image = (Image)resources.GetObject("_loginButton.Image");
+            _loginButton.ImageTransparentColor = Color.Magenta;
+            _loginButton.Name = "_loginButton";
+            _loginButton.Size = new Size(41, 22);
+            _loginButton.Text = "Login";
+            _loginButton.Click += LoginButton_Click;
             // 
             // ChatForm
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(730, 450);
-            Controls.Add(btn_exit);
-            Controls.Add(lbl_username_receiver);
-            Controls.Add(flp_chat);
-            Controls.Add(txtbx_message);
-            Controls.Add(btn_send);
+            Controls.Add(toolStrip1);
+            Controls.Add(_usersListView);
+            Controls.Add(_chat);
+            Controls.Add(_textBoxMessage);
+            Controls.Add(_sendButton);
             Name = "ChatForm";
-            Text = "ChatForm";
+            Text = "Secure Chat";
+            FormClosing += ChatForm_FormClosing;
+            Load += ChatForm_Load;
+            toolStrip1.ResumeLayout(false);
+            toolStrip1.PerformLayout();
             ResumeLayout(false);
             PerformLayout();
         }
 
         #endregion
 
-        private Button btn_send;
-        private TextBox txtbx_message;
-        private FlowLayoutPanel flp_chat;
-        private Label lbl_username_receiver;
-        private Button btn_exit;
+        private Button _sendButton;
+        private TextBox _textBoxMessage;
+        private FlowLayoutPanel _chat;
+        private ListView _usersListView;
+        private ToolStrip toolStrip1;
+        private ToolStripButton toolStripButton1;
+        private ToolStripButton _loginButton;
     }
 }
