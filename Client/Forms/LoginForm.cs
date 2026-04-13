@@ -11,21 +11,12 @@ namespace Client.Forms
             InitializeComponent();
         }
 
-        private void OnLoginSuccess(byte[] data)
-        {
-            Invoke(() =>
-            {
-                MessageBox.Show("Login successful!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                Close();
-            });
-        }
-
         private void OnLoginFailed(byte[] data)
         {
             Invoke(() =>
             {
                 string message = Encoding.UTF8.GetString(data);
-                MessageBox.Show($"Login failed: {message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             });
         }
 
@@ -43,7 +34,7 @@ namespace Client.Forms
         {
             ClientConnection connection = AppSession.Connection.Ensure();
 
-            connection.On(ProtocolSICmdType.ACK, OnLoginSuccess);
+            connection.On(ProtocolSICmdType.ACK, (_) => Invoke(Close));
             connection.On(ProtocolSICmdType.NACK, OnLoginFailed);
 
             connection.StartListening();
