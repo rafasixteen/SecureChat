@@ -5,6 +5,7 @@ using Server.Data.Models;
 using Server.Utils;
 using Shared;
 using Shared.DTOs;
+using Shared.DTOs.Shared.DTOs;
 using System.Net.Sockets;
 
 namespace Server.PacketHandlers
@@ -45,7 +46,12 @@ namespace Server.PacketHandlers
 
             await db.SaveChangesAsync();
 
-            await Program.SendPacketAsync(client, "Registration successful.", ProtocolSICmdType.ACK);
+            Program.LoggedUsers.TryAdd(client, request.Username);
+
+            RegisterResponse response = new(request.Username);
+            byte[] responseData = Serializer.Serialize(response);
+
+            await Program.SendPacketAsync(client, responseData, ProtocolSICmdType.ACK);
             Console.WriteLine($"[Server] User registered: {request.Username}");
         }
 

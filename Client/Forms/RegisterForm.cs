@@ -1,5 +1,7 @@
 ﻿using Client.Extensions;
 using EI.SI;
+using Shared.DTOs;
+using Shared.DTOs.Shared.DTOs;
 using System.Text;
 
 namespace Client.Forms
@@ -9,6 +11,17 @@ namespace Client.Forms
         public RegisterForm()
         {
             InitializeComponent();
+        }
+
+        private void OnRegisterSuccess(byte[] data)
+        {
+            Invoke(() =>
+            {
+                RegisterResponse response = Serializer.Deserialize<RegisterResponse>(data);
+                AppSession.Username.Value = response.Username;
+                AppSession.LoggedIn?.Invoke();
+                Close();
+            });
         }
 
         private void OnRegistrationFailed(byte[] data)
@@ -34,7 +47,7 @@ namespace Client.Forms
         {
             ClientConnection connection = AppSession.Connection.Ensure();
 
-            connection.On(ProtocolSICmdType.ACK, (_) => Invoke(Close));
+            connection.On(ProtocolSICmdType.ACK, OnRegisterSuccess);
             connection.On(ProtocolSICmdType.NACK, OnRegistrationFailed);
 
             connection.StartListening();

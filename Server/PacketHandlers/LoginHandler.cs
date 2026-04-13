@@ -34,7 +34,12 @@ namespace Server.PacketHandlers
                 return;
             }
 
-            await Program.SendPacketAsync(client, "Login successful.", ProtocolSICmdType.ACK);
+            Program.LoggedUsers.TryAdd(client, request.Username);
+
+            LoginResponse response = new(request.Username);
+            byte[] responseData = Serializer.Serialize(response);
+
+            await Program.SendPacketAsync(client, responseData, ProtocolSICmdType.ACK);
             Console.WriteLine($"[Server] User logged in: {request.Username}");
 
         }

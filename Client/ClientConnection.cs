@@ -14,6 +14,7 @@ namespace Client
         private readonly ProtocolSI _protocol = new();
 
         private readonly ConcurrentDictionary<ProtocolSICmdType, Action<byte[]>> _handlers = new();
+
         private readonly SemaphoreSlim _sendLock = new(1, 1);
 
         private CancellationTokenSource? _listenerCts;
@@ -98,7 +99,7 @@ namespace Client
         public void StartListening()
         {
             if (_listenerCts != null)
-                throw new InvalidOperationException("Listener already running.");
+                return;
 
             _listenerCts = new CancellationTokenSource();
             _ = Task.Run(() => ListenLoopAsync(_listenerCts.Token));
@@ -147,6 +148,12 @@ namespace Client
             byte[] encrypted = _protocol.GetData();
             byte[] decrypted = AesUtils.Decrypt(encrypted, aesKey, aesIv);
 
+            if (cmdType == ProtocolSICmdType.ACK || cmdType == ProtocolSICmdType.NACK)
+            {
+                RemoveHandler(ProtocolSICmdType.ACK);
+                RemoveHandler(ProtocolSICmdType.NACK);
+            }
+
             handler.Invoke(decrypted);
         }
 
@@ -156,7 +163,13 @@ namespace Client
 
         public void On(ProtocolSICmdType cmdType, Action<byte[]> handler)
         {
-            _handlers[cmdType] = handler;
+            if (!_handlers.TryAdd(cmdType, handler))
+                throw new InvalidOperationException($"Handler for {cmdType} already exists.");
+        }
+
+        public void RemoveHandler(ProtocolSICmdType cmdType)
+        {
+            _handlers.TryRemove(cmdType, out _);
         }
 
         public void ClearHandlers()

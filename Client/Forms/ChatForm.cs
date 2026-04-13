@@ -1,4 +1,7 @@
 ﻿using Client.Extensions;
+using EI.SI;
+using Shared.DTOs;
+using System.Text;
 
 namespace Client.Forms
 {
@@ -9,6 +12,53 @@ namespace Client.Forms
         public ChatForm()
         {
             InitializeComponent();
+
+            _friendsList.DataSource = AppSession.FriendUsernames;
+            AppSession.Username.ValueChanged += Username_ValueChanged;
+            AppSession.LoggedIn += AppSession_LoggedIn;
+        }
+
+        private void OnFriendsListReceived(byte[] data)
+        {
+            Invoke(() =>
+            {
+                FriendsListResponse response = Serializer.Deserialize<FriendsListResponse>(data);
+
+                AppSession.FriendUsernames.Clear();
+
+                MessageBox.Show($"You have {response.FriendUsernames.Count} friends.", "Friends List", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                foreach (string friend in response.FriendUsernames)
+                {
+                    AppSession.FriendUsernames.Add(friend);
+                }
+            });
+        }
+
+        private void OnFriendsListRejected(byte[] data)
+        {
+            Invoke(() =>
+            {
+                string message = Encoding.UTF8.GetString(data);
+                MessageBox.Show(message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            });
+        }
+
+        private async void AppSession_LoggedIn()
+        {
+            ClientConnection connection = AppSession.Connection.Ensure();
+
+            connection.On(ProtocolSICmdType.ACK, OnFriendsListReceived);
+            connection.On(ProtocolSICmdType.NACK, OnFriendsListRejected);
+
+            connection.StartListening();
+
+            await connection.RequestFriendsList();
+        }
+
+        private void Username_ValueChanged(string? username)
+        {
+            _usernameLabel.Text = username ?? "Not logged in";
         }
 
         private async void ChatForm_Load(object sender, EventArgs e)
@@ -16,32 +66,20 @@ namespace Client.Forms
             try
             {
                 ClientConnection connection = new("127.0.0.1", 8080);
-
                 await connection.PerformHandshakeAsync();
-
                 AppSession.Connection = connection;
 
                 ShowAuthForm<LoginForm>();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                MessageBox.Show("Connection error: " + ex.Message);
+                MessageBox.Show("Failed to connect to the server.", "Connection Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
         private void ChatForm_FormClosing(object sender, FormClosingEventArgs e)
         {
             AppSession.Connection.Ensure().Dispose();
-        }
-
-        private void SendButton_Click(object sender, EventArgs e)
-        {
-            string message = _textBoxMessage.Text.Trim();
-
-            string recipientUsername = _usersListView.SelectedItems.Count > 0 ? _usersListView.SelectedItems[0].Text : null;
-
-
-
         }
 
         private void LoginButton_Click(object sender, EventArgs e)

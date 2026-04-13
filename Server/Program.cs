@@ -20,6 +20,8 @@ namespace Server
 
         public static readonly ConcurrentDictionary<TcpClient, (byte[] aesKey, byte[] aesIv)> ConnectedClients = new();
 
+        public static readonly ConcurrentDictionary<TcpClient, string> LoggedUsers = new();
+
         public static async Task Main(string[] args)
         {
             Console.WriteLine($"[Server] Starting on port {PORT}...");
@@ -173,6 +175,7 @@ namespace Server
             _packetHandlerFactory.Register(new SecretKeyHandler());
             _packetHandlerFactory.Register(new RegisterHandler());
             _packetHandlerFactory.Register(new LoginHandler());
+            _packetHandlerFactory.Register(new FriendsListHandler());
         }
 
         #endregion

@@ -24,5 +24,10 @@ namespace Client.Extensions
             byte[] data = Serializer.Serialize(new LoginRequest(username, password));
             await session.SendPacketAsync(data, ProtocolSICmdType.USER_OPTION_2);
         }
+
+        public static async Task RequestFriendsList(this ClientConnection session)
+        {
+            await session.SendPacketAsync([], ProtocolSICmdType.USER_OPTION_3);
+        }
     }
 }

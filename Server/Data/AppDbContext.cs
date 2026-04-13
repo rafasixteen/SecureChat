@@ -39,8 +39,8 @@ namespace Server.Data
         protected override void OnConfiguring(DbContextOptionsBuilder options)
         {
             //options.UseSqlServer("Data Source=(localdb)\\MSSQLLocalDB;Initial Catalog=master;Integrated Security=True;Connect Timeout=30;Encrypt=False;Trust Server Certificate=False;Application Intent=ReadWrite;Multi Subnet Failover=False");
-            //options.UseSqlServer("Server=.\\SQLEXPRESS;Database=SecureChat;Trusted_Connection=True;TrustServerCertificate=True");
-            options.UseSqlServer("Server=(localdb)\\MSSQLLocalDB;Database=SecureChat;Trusted_Connection=True;TrustServerCertificate=True;");
+            options.UseSqlServer("Server=.\\SQLEXPRESS;Database=SecureChat;Trusted_Connection=True;TrustServerCertificate=True");
+            //options.UseSqlServer("Server=(localdb)\\MSSQLLocalDB;Database=SecureChat;Trusted_Connection=True;TrustServerCertificate=True;");
         }
     }
 }
