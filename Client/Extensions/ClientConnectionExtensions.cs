@@ -1,4 +1,4 @@
-﻿using EI.SI;
+﻿using Client.Transport;
 using Shared.DTOs;
 
 namespace Client.Extensions
@@ -15,19 +15,19 @@ namespace Client.Extensions
 
         public static async Task SendRegistrationPacketAsync(this ClientConnection session, string username, string password)
         {
-            byte[] data = Serializer.Serialize(new RegisterRequest(username, password));
-            await session.SendPacketAsync(data, ProtocolSICmdType.USER_OPTION_1);
+            byte[] payload = Serializer.Serialize(new RegisterRequest(username, password));
+            await session.SendPacketAsync("register", payload);
         }
 
         public static async Task SendLoginPacketAsync(this ClientConnection session, string username, string password)
         {
-            byte[] data = Serializer.Serialize(new LoginRequest(username, password));
-            await session.SendPacketAsync(data, ProtocolSICmdType.USER_OPTION_2);
+            byte[] payload = Serializer.Serialize(new LoginRequest(username, password));
+            await session.SendPacketAsync("login", payload);
         }
 
         public static async Task RequestFriendsList(this ClientConnection session)
         {
-            await session.SendPacketAsync([], ProtocolSICmdType.USER_OPTION_3);
+            await session.SendPacketAsync("get-friends", []);
         }
     }
 }

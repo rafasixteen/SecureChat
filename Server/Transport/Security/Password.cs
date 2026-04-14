@@ -1,6 +1,6 @@
 ﻿using System.Security.Cryptography;
 
-namespace Server.Utils
+namespace Server.Transport.Security
 {
     public static class Password
     {

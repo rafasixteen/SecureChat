@@ -1,25 +1,21 @@
-﻿using EI.SI;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Server.Data;
 using Server.Data.Models;
-using Server.Utils;
-using Shared;
+using Server.Transport.Connection;
+using Server.Transport.Security;
 using Shared.DTOs;
 using Shared.DTOs.Shared.DTOs;
 using System.Net.Sockets;
 
-namespace Server.PacketHandlers
+namespace Server.PacketHandlers.Application
 {
-    internal class RegisterHandler : IPacketHandler
+    public class RegisterHandler(ConnectionManager connectionManager) : IPacketHandler
     {
-        public ProtocolSICmdType CommandType => ProtocolSICmdType.USER_OPTION_1;
+        private readonly ConnectionManager _connectionManager = connectionManager;
 
-        public async Task HandleAsync(TcpClient client, byte[] encrypted)
+        public async Task HandleAsync(TcpClient client, byte[] payload)
         {
-            (byte[] aesKey, byte[] aesIv) = Program.GetClientKeys(client);
-
-            byte[] decrypted = AesUtils.Decrypt(encrypted, aesKey, aesIv);
-            RegisterRequest request = Serializer.Deserialize<RegisterRequest>(decrypted);
+            RegisterRequest request = Serializer.Deserialize<RegisterRequest>(payload);
 
             if (!await ValidateInput(client, request))
                 return;
@@ -30,7 +26,7 @@ namespace Server.PacketHandlers
 
             if (userExists)
             {
-                await Program.SendPacketAsync(client, "Username already taken.", ProtocolSICmdType.NACK);
+                await Program.SendPacketAsync(client, "register-failed", "Username already taken.");
                 return;
             }
 
@@ -46,12 +42,12 @@ namespace Server.PacketHandlers
 
             await db.SaveChangesAsync();
 
-            Program.LoggedUsers.TryAdd(client, request.Username);
+            _connectionManager.SetUsername(client, request.Username);
 
             RegisterResponse response = new(request.Username);
             byte[] responseData = Serializer.Serialize(response);
 
-            await Program.SendPacketAsync(client, responseData, ProtocolSICmdType.ACK);
+            await Program.SendPacketAsync(client, "register-success", responseData);
             Console.WriteLine($"[Server] User registered: {request.Username}");
         }
 
@@ -59,19 +55,19 @@ namespace Server.PacketHandlers
         {
             if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
             {
-                await Program.SendPacketAsync(client, "Username and password are required.", ProtocolSICmdType.NACK);
+                await Program.SendPacketAsync(client, "register-failed", "Username and password are required.");
                 return false;
             }
 
             if (request.Username.Length > 32)
             {
-                await Program.SendPacketAsync(client, "Username must be 32 characters or fewer.", ProtocolSICmdType.NACK);
+                await Program.SendPacketAsync(client, "register-failed", "Username must be 32 characters or fewer.");
                 return false;
             }
 
             if (request.Password.Length < 4)
             {
-                await Program.SendPacketAsync(client, "Password must be at least 4 characters.", ProtocolSICmdType.NACK);
+                await Program.SendPacketAsync(client, "register-failed", "Password must be at least 4 characters.");
                 return false;
             }
 

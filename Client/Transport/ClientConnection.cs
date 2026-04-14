@@ -1,19 +1,24 @@
 using EI.SI;
 using Shared;
+using Shared.DTOs;
 using System.Collections.Concurrent;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Client
+namespace Client.Transport
 {
+    public delegate void PacketHandler(byte[] data);
+
     public sealed class ClientConnection : IDisposable
     {
         private readonly TcpClient _client;
         private readonly NetworkStream _stream;
         private readonly ProtocolSI _protocol = new();
 
-        private readonly ConcurrentDictionary<ProtocolSICmdType, Action<byte[]>> _handlers = new();
+        private readonly ConcurrentDictionary<ProtocolSICmdType, PacketHandler> _protocolHandlers = new();
+
+        private readonly ConcurrentDictionary<string, PacketHandler> _applicationHandlers = new();
 
         private readonly SemaphoreSlim _sendLock = new(1, 1);
 
@@ -43,10 +48,9 @@ namespace Client
 
             byte[] keyAndIv = CombineKeyAndIv(_aesKey, _aesIv);
             byte[] encryptedKey = rsa.Encrypt(keyAndIv, RSAEncryptionPadding.Pkcs1);
+            byte[] packet = _protocol.Make(ProtocolSICmdType.SECRET_KEY, encryptedKey);
 
-            await SendRawAsync(ProtocolSICmdType.SECRET_KEY, encryptedKey).ConfigureAwait(false);
-
-            Console.WriteLine("[Client] Handshake complete");
+            await _stream.WriteAsync(packet).ConfigureAwait(false);
         }
 
         private async Task<string> ReceiveServerPublicKeyAsync()
@@ -68,17 +72,12 @@ namespace Client
 
         #region Send
 
-        public async Task SendPacketAsync(byte[] data, ProtocolSICmdType commandType)
+        public async Task SendPacketAsync(ProtocolSICmdType commandType, byte[] payload)
         {
             (byte[] aesKey, byte[] aesIv) = GetKeys();
-            byte[] encrypted = AesUtils.Encrypt(data, aesKey, aesIv);
 
-            await SendRawAsync(commandType, encrypted).ConfigureAwait(false);
-        }
-
-        private async Task SendRawAsync(ProtocolSICmdType cmdType, byte[] payload)
-        {
-            byte[] packet = _protocol.Make(cmdType, payload);
+            byte[] encrypted = AesUtils.Encrypt(payload, aesKey, aesIv);
+            byte[] packet = _protocol.Make(commandType, encrypted);
 
             await _sendLock.WaitAsync().ConfigureAwait(false);
 
@@ -90,6 +89,14 @@ namespace Client
             {
                 _sendLock.Release();
             }
+        }
+
+        public async Task SendPacketAsync(string commandType, byte[] payload)
+        {
+            Envelope env = new(commandType, payload);
+            byte[] data = Serializer.Serialize(env);
+
+            await SendPacketAsync(ProtocolSICmdType.SYM_CIPHER_DATA, data).ConfigureAwait(false);
         }
 
         #endregion
@@ -114,6 +121,8 @@ namespace Client
 
         private async Task ListenLoopAsync(CancellationToken token)
         {
+            (byte[] aesKey, byte[] aesIv) = GetKeys();
+
             try
             {
                 while (!token.IsCancellationRequested)
@@ -123,7 +132,27 @@ namespace Client
                     if (bytesRead == 0)
                         break;
 
-                    HandleIncomingPacket();
+                    ProtocolSICmdType commandType = _protocol.GetCmdType();
+
+                    byte[] payload = _protocol.GetData();
+                    byte[] decrypted = AesUtils.Decrypt(payload, aesKey, aesIv);
+
+                    if (commandType == ProtocolSICmdType.SYM_CIPHER_DATA)
+                    {
+                        Envelope env = Serializer.Deserialize<Envelope>(decrypted);
+
+                        if (!_applicationHandlers.TryGetValue(env.CommandType, out PacketHandler? appHandler))
+                            throw new Exception($"No application handler registered for command type: {env.CommandType}");
+
+                        appHandler.Invoke(env.Payload);
+                    }
+                    else
+                    {
+                        if (!_protocolHandlers.TryGetValue(commandType, out PacketHandler? protocolHandler))
+                            throw new Exception($"No protocol handler registered for command type: {commandType}");
+
+                        protocolHandler.Invoke(decrypted);
+                    }
                 }
             }
             catch (OperationCanceledException)
@@ -136,45 +165,36 @@ namespace Client
             }
         }
 
-        private void HandleIncomingPacket()
-        {
-            ProtocolSICmdType cmdType = _protocol.GetCmdType();
-
-            if (!_handlers.TryGetValue(cmdType, out Action<byte[]>? handler))
-                return;
-
-            (byte[] aesKey, byte[] aesIv) = GetKeys();
-
-            byte[] encrypted = _protocol.GetData();
-            byte[] decrypted = AesUtils.Decrypt(encrypted, aesKey, aesIv);
-
-            if (cmdType == ProtocolSICmdType.ACK || cmdType == ProtocolSICmdType.NACK)
-            {
-                RemoveHandler(ProtocolSICmdType.ACK);
-                RemoveHandler(ProtocolSICmdType.NACK);
-            }
-
-            handler.Invoke(decrypted);
-        }
-
         #endregion
 
         #region Handlers
 
-        public void On(ProtocolSICmdType cmdType, Action<byte[]> handler)
+        public void On(ProtocolSICmdType commandType, PacketHandler handler)
         {
-            if (!_handlers.TryAdd(cmdType, handler))
-                throw new InvalidOperationException($"Handler for {cmdType} already exists.");
+            if (!_protocolHandlers.TryAdd(commandType, handler))
+                throw new InvalidOperationException($"Protocol handler for {commandType} already exists.");
         }
 
-        public void RemoveHandler(ProtocolSICmdType cmdType)
+        public void On(string commandType, PacketHandler handler)
         {
-            _handlers.TryRemove(cmdType, out _);
+            if (!_applicationHandlers.TryAdd(commandType, handler))
+                throw new InvalidOperationException($"Application handler for {commandType} already exists.");
+        }
+
+        public void RemoveHandler(ProtocolSICmdType commandType)
+        {
+            _protocolHandlers.TryRemove(commandType, out _);
+        }
+
+        public void RemoveHandler(string commandType)
+        {
+            _applicationHandlers.TryRemove(commandType, out _);
         }
 
         public void ClearHandlers()
         {
-            _handlers.Clear();
+            _protocolHandlers.Clear();
+            _applicationHandlers.Clear();
         }
 
         #endregion

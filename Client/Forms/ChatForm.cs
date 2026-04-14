@@ -1,5 +1,5 @@
 ﻿using Client.Extensions;
-using EI.SI;
+using Client.Transport;
 using Shared.DTOs;
 using System.Text;
 
@@ -48,8 +48,8 @@ namespace Client.Forms
         {
             ClientConnection connection = AppSession.Connection.Ensure();
 
-            connection.On(ProtocolSICmdType.ACK, OnFriendsListReceived);
-            connection.On(ProtocolSICmdType.NACK, OnFriendsListRejected);
+            connection.On("friends-list-success", OnFriendsListReceived);
+            connection.On("friends-list-failed", OnFriendsListRejected);
 
             connection.StartListening();
 

@@ -1,12 +1,9 @@
-﻿using EI.SI;
-using System.Net.Sockets;
+﻿using System.Net.Sockets;
 
 namespace Server.PacketHandlers
 {
-    internal interface IPacketHandler
+    public interface IPacketHandler
     {
-        ProtocolSICmdType CommandType { get; }
-
-        Task HandleAsync(TcpClient client, byte[] encrypted);
+        Task HandleAsync(TcpClient client, byte[] payload);
     }
 }

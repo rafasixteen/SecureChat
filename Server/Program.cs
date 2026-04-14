@@ -1,8 +1,12 @@
 ﻿using EI.SI;
 using Server.PacketHandlers;
+using Server.PacketHandlers.Application;
+using Server.PacketHandlers.Protocol;
+using Server.Transport.Connection;
+using Server.Transport.Security;
 using Shared;
+using Shared.DTOs;
 using Shared.Exceptions;
-using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
@@ -16,17 +20,20 @@ namespace Server
 
         public static readonly RSA Rsa = RSA.Create(2048);
 
-        private static readonly PacketHandlerFactory _packetHandlerFactory = new();
+        private static readonly ConnectionManager _connectionManager = new();
 
-        public static readonly ConcurrentDictionary<TcpClient, (byte[] aesKey, byte[] aesIv)> ConnectedClients = new();
+        private static readonly ProtocolDispatcher _protocolDispacter = new();
 
-        public static readonly ConcurrentDictionary<TcpClient, string> LoggedUsers = new();
+        private static readonly ApplicationDispatcher _applicationDispatcher = new();
 
         public static async Task Main(string[] args)
         {
             Console.WriteLine($"[Server] Starting on port {PORT}...");
 
-            RegisterHandlers();
+            _protocolDispacter.With(ProtocolSICmdType.SYM_CIPHER_DATA, new SymmetricDataHandler(_connectionManager, _applicationDispatcher));
+            _protocolDispacter.With(ProtocolSICmdType.SECRET_KEY, new SecretKeyHandler(_connectionManager, Rsa));
+
+            _applicationDispatcher.With("login", new LoginHandler(_connectionManager));
 
             using CancellationTokenSource cts = new();
 
@@ -48,7 +55,7 @@ namespace Server
                 while (!cts.IsCancellationRequested)
                 {
                     TcpClient client = await listener.AcceptTcpClientAsync(cts.Token);
-                    Console.WriteLine($"[Server] Client connected: {client.Client.RemoteEndPoint}");
+                    _connectionManager.Connect(client);
                     _ = Task.Run(() => HandleClientAsync(client), cts.Token);
                 }
             }
@@ -68,7 +75,7 @@ namespace Server
 
             try
             {
-                await SendRsaPublicKeyAsync(client, protocol, stream);
+                await Handshake.SendPublicKey(client, Rsa);
                 await ReceiveLoopAsync(client, protocol, stream);
             }
             catch (Exception ex)
@@ -77,7 +84,7 @@ namespace Server
             }
             finally
             {
-                CleanupClient(client);
+                _connectionManager.Disconnect(client);
             }
         }
 
@@ -90,104 +97,67 @@ namespace Server
                 if (bytesRead == 0)
                     break;
 
-                ProtocolSICmdType cmdType = protocol.GetCmdType();
-                IPacketHandler? handler = _packetHandlerFactory.GetHandler(cmdType);
-
-                if (handler == null)
-                {
-                    Console.WriteLine($"[Server] No handler for {cmdType}");
-                    continue;
-                }
+                ProtocolSICmdType commandType = protocol.GetCmdType();
+                byte[] payload = protocol.GetData();
 
                 try
                 {
-                    await handler.HandleAsync(client, protocol.GetData());
+                    await _protocolDispacter.DispatchAsync(client, commandType, payload);
                 }
                 catch (InvalidPacketException ex)
                 {
                     Console.WriteLine($"[Server] Invalid packet from {client.Client.RemoteEndPoint}: {ex.Message}");
+                    _connectionManager.Disconnect(client);
                     break;
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[Server] Handler error: {ex}");
-                    await SendPacketAsync(client, "Internal server error", ProtocolSICmdType.NACK);
+                    Console.WriteLine($"[Server] {commandType} error: {ex}");
+                    await SendPacketAsync(client, "server-failed", "Internal server error");
                 }
             }
         }
 
         #endregion
 
-        #region Handshake
-
-        private static async Task SendRsaPublicKeyAsync(TcpClient client, ProtocolSI protocol, NetworkStream stream)
-        {
-            string publicKey = Convert.ToBase64String(Rsa.ExportRSAPublicKey());
-
-            byte[] data = Encoding.UTF8.GetBytes(publicKey);
-            byte[] packet = protocol.Make(ProtocolSICmdType.PUBLIC_KEY, data);
-
-            await stream.WriteAsync(packet);
-
-            Console.WriteLine($"[Server] Sent public key to {client.Client.RemoteEndPoint}");
-        }
-
-        #endregion
-
         #region Packet Sending
 
-        public static async Task SendPacketAsync(TcpClient client, byte[] data, ProtocolSICmdType commandType)
+        public static async Task SendPacketAsync(TcpClient client, ProtocolSICmdType commandType, byte[] payload)
         {
-            var (aesKey, aesIv) = GetClientKeys(client);
+            await SendRawAsync(client, commandType, payload).ConfigureAwait(false);
+        }
+
+        public static async Task SendPacketAsync(TcpClient client, ProtocolSICmdType commandType, string message)
+        {
+            byte[] payload = Encoding.UTF8.GetBytes(message);
+            await SendPacketAsync(client, commandType, payload).ConfigureAwait(false);
+        }
+
+        public static async Task SendPacketAsync(TcpClient client, string commandType, byte[] payload)
+        {
+            Envelope env = new(commandType, payload);
+            byte[] data = Serializer.Serialize(env);
+
+            await SendPacketAsync(client, ProtocolSICmdType.SYM_CIPHER_DATA, data).ConfigureAwait(false);
+        }
+
+        public static async Task SendPacketAsync(TcpClient client, string commandType, string message)
+        {
+            byte[] payload = Encoding.UTF8.GetBytes(message);
+            await SendPacketAsync(client, commandType, payload).ConfigureAwait(false);
+        }
+
+        private static async Task SendRawAsync(TcpClient client, ProtocolSICmdType commandType, byte[] payload)
+        {
+            (byte[] aesKey, byte[] aesIv) = _connectionManager.GetAesKeys(client);
 
             ProtocolSI protocol = new();
-            NetworkStream stream = client.GetStream();
+            using NetworkStream stream = client.GetStream();
 
-            byte[] encrypted = AesUtils.Encrypt(data, aesKey, aesIv);
+            byte[] encrypted = AesUtils.Encrypt(payload, aesKey, aesIv);
             byte[] packet = protocol.Make(commandType, encrypted);
 
-            await stream.WriteAsync(packet);
-        }
-
-        public static Task SendPacketAsync(TcpClient client, string message, ProtocolSICmdType commandType)
-        {
-            return SendPacketAsync(client, Encoding.UTF8.GetBytes(message), commandType);
-        }
-
-        #endregion
-
-        #region Client Key Management
-
-        public static (byte[] aesKey, byte[] aesIv) GetClientKeys(TcpClient client)
-        {
-            if (!ConnectedClients.TryGetValue(client, out var keys))
-                throw new Exception("Handshake not completed.");
-
-            return keys;
-        }
-
-        #endregion
-
-        #region Handler Registration
-
-        private static void RegisterHandlers()
-        {
-            _packetHandlerFactory.Register(new SecretKeyHandler());
-            _packetHandlerFactory.Register(new RegisterHandler());
-            _packetHandlerFactory.Register(new LoginHandler());
-            _packetHandlerFactory.Register(new FriendsListHandler());
-        }
-
-        #endregion
-
-        #region Cleanup
-
-        private static void CleanupClient(TcpClient client)
-        {
-            Console.WriteLine($"[Server] Client disconnected: {client.Client.RemoteEndPoint}");
-
-            ConnectedClients.TryRemove(client, out _);
-            client.Close();
+            await stream.WriteAsync(packet).ConfigureAwait(false);
         }
 
         #endregion

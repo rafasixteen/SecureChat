@@ -1,5 +1,5 @@
 ﻿using Client.Extensions;
-using EI.SI;
+using Client.Transport;
 using Shared.DTOs;
 using System.Text;
 
@@ -46,8 +46,8 @@ namespace Client.Forms
         {
             ClientConnection connection = AppSession.Connection.Ensure();
 
-            connection.On(ProtocolSICmdType.ACK, OnLoginSuccess);
-            connection.On(ProtocolSICmdType.NACK, OnLoginFailed);
+            connection.On("login-success", OnLoginSuccess);
+            connection.On("login-failed", OnLoginFailed);
 
             connection.StartListening();
         }

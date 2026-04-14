@@ -1,24 +1,20 @@
-﻿using EI.SI;
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Server.Data;
 using Server.Data.Models;
-using Server.Utils;
-using Shared;
+using Server.Transport.Connection;
+using Server.Transport.Security;
 using Shared.DTOs;
 using System.Net.Sockets;
 
-namespace Server.PacketHandlers
+namespace Server.PacketHandlers.Application
 {
-    internal class LoginHandler : IPacketHandler
+    public class LoginHandler(ConnectionManager connectionManager) : IPacketHandler
     {
-        public ProtocolSICmdType CommandType => ProtocolSICmdType.USER_OPTION_2;
+        private readonly ConnectionManager _connectionManager = connectionManager;
 
-        public async Task HandleAsync(TcpClient client, byte[] encrypted)
+        public async Task HandleAsync(TcpClient client, byte[] payload)
         {
-            (byte[] aesKey, byte[] aesIv) = Program.GetClientKeys(client);
-
-            byte[] decrypted = AesUtils.Decrypt(encrypted, aesKey, aesIv);
-            LoginRequest request = Serializer.Deserialize<LoginRequest>(decrypted);
+            LoginRequest request = Serializer.Deserialize<LoginRequest>(payload);
 
             if (!await ValidateInput(client, request))
                 return;
@@ -30,16 +26,16 @@ namespace Server.PacketHandlers
 
             if (!valid)
             {
-                await Program.SendPacketAsync(client, "Invalid username or password.", ProtocolSICmdType.NACK);
+                await Program.SendPacketAsync(client, "login-failed", "Invalid username or password.");
                 return;
             }
 
-            Program.LoggedUsers.TryAdd(client, request.Username);
+            _connectionManager.SetUsername(client, request.Username);
 
             LoginResponse response = new(request.Username);
             byte[] responseData = Serializer.Serialize(response);
 
-            await Program.SendPacketAsync(client, responseData, ProtocolSICmdType.ACK);
+            await Program.SendPacketAsync(client, "login-success", responseData);
             Console.WriteLine($"[Server] User logged in: {request.Username}");
 
         }
@@ -48,7 +44,7 @@ namespace Server.PacketHandlers
         {
             if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
             {
-                await Program.SendPacketAsync(client, "Username and password are required.", ProtocolSICmdType.NACK);
+                await Program.SendPacketAsync(client, "login-failed", "Username and password are required.");
                 return false;
             }
 
