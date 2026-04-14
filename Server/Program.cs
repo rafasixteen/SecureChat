@@ -34,6 +34,7 @@ namespace Server
             _protocolDispacter.With(ProtocolSICmdType.SECRET_KEY, new SecretKeyHandler(_connectionManager, Rsa));
 
             _applicationDispatcher.With("login", new LoginHandler(_connectionManager));
+            _applicationDispatcher.With("get-friends", new FriendsListHandler(_connectionManager));
 
             using CancellationTokenSource cts = new();
 
@@ -71,7 +72,7 @@ namespace Server
         private static async Task HandleClientAsync(TcpClient client)
         {
             ProtocolSI protocol = new();
-            using NetworkStream stream = client.GetStream();
+            NetworkStream stream = client.GetStream();
 
             try
             {
@@ -152,7 +153,7 @@ namespace Server
             (byte[] aesKey, byte[] aesIv) = _connectionManager.GetAesKeys(client);
 
             ProtocolSI protocol = new();
-            using NetworkStream stream = client.GetStream();
+            NetworkStream stream = client.GetStream();
 
             byte[] encrypted = AesUtils.Encrypt(payload, aesKey, aesIv);
             byte[] packet = protocol.Make(commandType, encrypted);
