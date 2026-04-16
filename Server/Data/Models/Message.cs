@@ -7,17 +7,15 @@ namespace Server.Data.Models
         [Key]
         public Guid Id { get; set; }
 
-        public required string Contents { get; set; }
-
-        public required string Signature { get; set; }
+        public required string Content { get; set; }
 
         public Guid SenderId { get; set; }
 
-        public required User Sender { get; set; }
+        public User Sender { get; set; } = null!;
 
         public Guid ReceiverId { get; set; }
 
-        public required User Receiver { get; set; }
+        public User Receiver { get; set; } = null!;
 
         public DateTime SentAt { get; set; }
     }

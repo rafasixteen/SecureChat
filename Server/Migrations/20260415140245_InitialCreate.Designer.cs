@@ -12,7 +12,7 @@ using Server.Data;
 namespace Server.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260412195332_InitialCreate")]
+    [Migration("20260415140245_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -43,10 +43,6 @@ namespace Server.Migrations
 
                     b.Property<DateTime>("SentAt")
                         .HasColumnType("datetime2");
-
-                    b.Property<string>("Signature")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
 

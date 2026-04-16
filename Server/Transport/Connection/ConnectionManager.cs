@@ -75,6 +75,17 @@ namespace Server.Transport.Connection
             return connection.Username;
         }
 
+        public TcpClient? GetClientByUsername(string username)
+        {
+            foreach (KeyValuePair<TcpClient, Connection> kvp in ConnectedClients)
+            {
+                if (kvp.Value.Username == username)
+                    return kvp.Key;
+            }
+
+            return null;
+        }
+
         private Connection GetConnection(TcpClient client)
         {
             if (!ConnectedClients.TryGetValue(client, out Connection? connection))

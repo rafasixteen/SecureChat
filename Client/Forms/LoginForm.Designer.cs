@@ -104,7 +104,6 @@
             Controls.Add(_textBoxUsername);
             Name = "LoginForm";
             Text = "Secure Chat - Login";
-            FormClosed += LoginForm_FormClosed;
             Load += LoginForm_Load;
             ResumeLayout(false);
             PerformLayout();

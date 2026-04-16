@@ -33,8 +33,11 @@ namespace Server
             _protocolDispacter.With(ProtocolSICmdType.SYM_CIPHER_DATA, new SymmetricDataHandler(_connectionManager, _applicationDispatcher));
             _protocolDispacter.With(ProtocolSICmdType.SECRET_KEY, new SecretKeyHandler(_connectionManager, Rsa));
 
+            _applicationDispatcher.With("register", new RegisterHandler(_connectionManager));
             _applicationDispatcher.With("login", new LoginHandler(_connectionManager));
             _applicationDispatcher.With("get-friends", new FriendsListHandler(_connectionManager));
+            _applicationDispatcher.With("get-conversation", new GetConversationHandler(_connectionManager));
+            _applicationDispatcher.With("send-message", new MessageHandler(_connectionManager));
 
             using CancellationTokenSource cts = new();
 
@@ -59,6 +62,10 @@ namespace Server
                     _connectionManager.Connect(client);
                     _ = Task.Run(() => HandleClientAsync(client), cts.Token);
                 }
+            }
+            catch (OperationCanceledException)
+            {
+                Console.WriteLine("[Server] Shutdown signal received.");
             }
             finally
             {

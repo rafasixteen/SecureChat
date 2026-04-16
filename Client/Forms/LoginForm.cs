@@ -1,5 +1,4 @@
 ﻿using Client.Extensions;
-using Client.Transport;
 using Shared.DTOs;
 using System.Text;
 
@@ -34,30 +33,16 @@ namespace Client.Forms
 
         private async void LoginButton_Click(object sender, EventArgs e)
         {
-            ClientConnection connection = AppSession.Connection.Ensure();
-
             string username = _textBoxUsername.Text;
             string password = _textBoxPassword.Text;
 
-            await connection.SendLoginPacketAsync(username, password);
+            await AppSession.Connection.SendLoginPacketAsync(username, password);
         }
 
         private void LoginForm_Load(object sender, EventArgs e)
         {
-            ClientConnection connection = AppSession.Connection.Ensure();
-
-            connection.On("login-success", OnLoginSuccess);
-            connection.On("login-failed", OnLoginFailed);
-
-            connection.StartListening();
-        }
-
-        private void LoginForm_FormClosed(object sender, FormClosedEventArgs e)
-        {
-            ClientConnection connection = AppSession.Connection.Ensure();
-
-            connection.StopListening();
-            connection.ClearHandlers();
+            AppSession.Connection.On("login-success", OnLoginSuccess);
+            AppSession.Connection.On("login-failed", OnLoginFailed);
         }
 
         private void CreateAccountLinkLabel_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)

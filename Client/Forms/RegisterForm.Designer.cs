@@ -122,7 +122,6 @@
             Controls.Add(_registerButton);
             Name = "RegisterForm";
             Text = "Secure Chat - Register";
-            FormClosed += RegisterForm_FormClosed;
             Load += RegisterForm_Load;
             ResumeLayout(false);
             PerformLayout();

@@ -31,7 +31,6 @@ namespace Server.Migrations
                 {
                     Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     Contents = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    Signature = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     SenderId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     ReceiverId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     SentAt = table.Column<DateTime>(type: "datetime2", nullable: false)

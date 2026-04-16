@@ -1,5 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Server.Data.Models
 {
@@ -14,10 +13,8 @@ namespace Server.Data.Models
 
         public required string Salt { get; set; }
 
-        [InverseProperty("Sender")]
-        public virtual ICollection<Message>? MessagesSent { get; set; }
+        public ICollection<Message> MessagesSent { get; set; } = new List<Message>();
 
-        [InverseProperty("Receiver")]
-        public virtual ICollection<Message>? MessagesReceived { get; set; }
+        public ICollection<Message> MessagesReceived { get; set; } = new List<Message>();
     }
 }
