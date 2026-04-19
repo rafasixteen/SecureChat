@@ -5,8 +5,10 @@ namespace Server.PacketHandlers
 {
     public class ProtocolDispatcher
     {
+        // Dicionário para mapear os tipos de comando para seus respectivos manipuladores
         private readonly Dictionary<ProtocolSICmdType, IPacketHandler> _handlers = new();
 
+        // Método para registar um manipulador para um tipo de comando específico
         public ProtocolDispatcher With(ProtocolSICmdType commandType, IPacketHandler handler)
         {
             if (!_handlers.TryAdd(commandType, handler))
@@ -15,6 +17,7 @@ namespace Server.PacketHandlers
             return this;
         }
 
+        // Método para encaminhar um comando recebido para o manipulador apropriado
         public async Task DispatchAsync(TcpClient client, ProtocolSICmdType commandType, byte[] data)
         {
             if (!_handlers.TryGetValue(commandType, out IPacketHandler? handler))

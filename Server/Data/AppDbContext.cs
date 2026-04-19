@@ -5,30 +5,30 @@ namespace Server.Data
 {
     public class AppDbContext : DbContext
     {
+        // DbSets para as entidades User e Message
         public DbSet<User> Users { get; set; }
-
         public DbSet<Message> Messages { get; set; }
 
-        public AppDbContext()
-        {
+        // Builder (Vasio)
+        public AppDbContext() { }
 
-        }
-
-        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
-        {
-
-        }
+        // Builder (Injeção de dependências)
+        public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
 
+            // Configurar a relação entre user e message para evitar erros
+            // Mensagens enviadas
             modelBuilder.Entity<Message>()
                  .HasOne(m => m.Sender)
                  .WithMany(u => u.MessagesSent)
                  .HasForeignKey(m => m.SenderId)
                  .OnDelete(DeleteBehavior.Restrict);
 
+            // Configurar a relação entre user e message para evitar erros
+            // Mensagens recebidas
             modelBuilder.Entity<Message>()
                 .HasOne(m => m.Receiver)
                 .WithMany(u => u.MessagesReceived)
