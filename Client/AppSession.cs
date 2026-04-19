@@ -10,7 +10,7 @@ namespace Client
 
         public static ClientConnection Connection
         {
-            get
+            get // Devolve a conexão atual, ou lança uma exceção se não houver conexão estabelecida
             {
                 if (_connection == null)
                 {
@@ -19,7 +19,7 @@ namespace Client
 
                 return _connection;
             }
-            set
+            set // Define a conexão, mas lança uma exceção se já houver uma conexão definida para evitar sobrescrever acidentalmente a conexão existente
             {
                 if (_connection == value)
                 {

@@ -37,6 +37,7 @@ namespace Client.Transport
 
         #region Handshake
 
+        // Função para executar o handshake com o servidor
         public async Task PerformHandshakeAsync()
         {
             string publicKey = await ReceiveServerPublicKeyAsync().ConfigureAwait(false);
@@ -53,6 +54,7 @@ namespace Client.Transport
             await _stream.WriteAsync(packet).ConfigureAwait(false);
         }
 
+        // Função para receber a chave pública do servidor durante o handshake
         private async Task<string> ReceiveServerPublicKeyAsync()
         {
             int bytesRead = await _stream.ReadAsync(_protocol.Buffer).ConfigureAwait(false);
@@ -72,6 +74,7 @@ namespace Client.Transport
 
         #region Send
 
+        // Função para enviar um pacote ao servidor, criptografando o payload com AES usando a chave e IV estabelecidos durante o handshake
         public async Task SendPacketAsync(ProtocolSICmdType commandType, byte[] payload)
         {
             (byte[] aesKey, byte[] aesIv) = GetKeys();
@@ -91,6 +94,7 @@ namespace Client.Transport
             }
         }
 
+        // Função de conveniência para enviar um comando de aplicação, onde o tipo de comando é uma string e o payload é um array de bytes, encapsulando ambos em um envelope antes de enviar usando o protocolo
         public async Task SendPacketAsync(string commandType, byte[] payload)
         {
             Envelope env = new(commandType, payload);
@@ -103,6 +107,7 @@ namespace Client.Transport
 
         #region Receive / Listener
 
+        // Função para iniciar um loop de escuta em segundo plano que lê pacotes do servidor, descriptografa usando AES, e despacha para os manipuladores registrados com base no tipo de comando
         public void StartListening()
         {
             if (_listenerCts != null)
@@ -112,6 +117,7 @@ namespace Client.Transport
             _ = Task.Run(() => ListenLoopAsync(_listenerCts.Token));
         }
 
+        // Função para parar o loop de escuta e limpar os recursos associados
         public void StopListening()
         {
             _listenerCts?.Cancel();
@@ -119,12 +125,14 @@ namespace Client.Transport
             _listenerCts = null;
         }
 
+        // Loop de escuta que lê pacotes do servidor, descriptografa usando AES, e despacha para os manipuladores registrados com base no tipo de comando
         private async Task ListenLoopAsync(CancellationToken token)
         {
             (byte[] aesKey, byte[] aesIv) = GetKeys();
 
             try
             {
+                // Enquanto o token de cancelamento não for solicitado, continue lendo pacotes do servidor
                 while (!token.IsCancellationRequested)
                 {
                     int bytesRead = await _stream.ReadAsync(_protocol.Buffer, token).ConfigureAwait(false);
@@ -137,6 +145,8 @@ namespace Client.Transport
                     byte[] payload = _protocol.GetData();
                     byte[] decrypted = AesUtils.Decrypt(payload, aesKey, aesIv);
 
+                    // Se o tipo de comando for SYM_CIPHER_DATA, isso indica que o payload é um envelope contendo um comando de aplicação
+                    // então deserializamos o envelope para obter o tipo de comando e os dados do payload, e encaminhamos para o manipulador de aplicação registrado.
                     if (commandType == ProtocolSICmdType.SYM_CIPHER_DATA)
                     {
                         Envelope env = Serializer.Deserialize<Envelope>(decrypted);
@@ -146,6 +156,7 @@ namespace Client.Transport
 
                         appHandler.Invoke(env.Payload);
                     }
+                    // Caso contrário, tratamos como um comando de protocolo e encaminhamos diretamente para o manipulador de protocolo registrado com base no tipo de comando
                     else
                     {
                         if (!_protocolHandlers.TryGetValue(commandType, out PacketHandler? protocolHandler))
@@ -157,7 +168,7 @@ namespace Client.Transport
             }
             catch (OperationCanceledException)
             {
-                // Expected on shutdown
+                // O loop de escuta foi cancelado, o que é esperado ao chamar StopListening, então apenas saímos do loop silenciosamente
             }
             catch (Exception ex)
             {
@@ -169,28 +180,33 @@ namespace Client.Transport
 
         #region Handlers
 
+        // Função para registar um manipulador para um tipo de comando de protocolo específico, lançando uma exceção se um manipulador já estiver registado para o mesmo tipo de comando
         public void On(ProtocolSICmdType commandType, PacketHandler handler)
         {
             if (!_protocolHandlers.TryAdd(commandType, handler))
                 throw new InvalidOperationException($"Protocol handler for {commandType} already exists.");
         }
 
+        // Função para registar um manipulador para um tipo de comando de aplicação específico, lançando uma exceção se um manipulador já estiver registado para o mesmo tipo de comando
         public void On(string commandType, PacketHandler handler)
         {
             if (!_applicationHandlers.TryAdd(commandType, handler))
                 throw new InvalidOperationException($"Application handler for {commandType} already exists.");
         }
 
+        // Função para remover um manipulador registado para um tipo de comando de protocolo específico
         public void RemoveHandler(ProtocolSICmdType commandType)
         {
             _protocolHandlers.TryRemove(commandType, out _);
         }
 
+        // Função para remover um manipulador registado para um tipo de comando de aplicação específico
         public void RemoveHandler(string commandType)
         {
             _applicationHandlers.TryRemove(commandType, out _);
         }
 
+        // Função para limpar todos os manipuladores registados de ambos os tipos de comando de protocolo e aplicação
         public void ClearHandlers()
         {
             _protocolHandlers.Clear();
@@ -201,6 +217,7 @@ namespace Client.Transport
 
         #region Helpers
 
+        // Função auxiliar para combinar a chave AES e o IV em um único array de bytes para criptografar com RSA durante o handshake
         private static byte[] CombineKeyAndIv(byte[] key, byte[] iv)
         {
             byte[] result = new byte[key.Length + iv.Length];
@@ -209,6 +226,7 @@ namespace Client.Transport
             return result;
         }
 
+        // Função auxiliar para obter a chave AES e o IV associados à conexão do cliente, lançando uma exceção se o handshake ainda não tiver sido concluído e as chaves não estiverem disponíveis
         private (byte[] aesKey, byte[] aesIv) GetKeys()
         {
             if (_aesKey == null || _aesIv == null)
@@ -221,6 +239,7 @@ namespace Client.Transport
 
         #region Dispose
 
+        // Limpar os recursos da conexão
         public void Dispose()
         {
             if (_isDisposed) return;

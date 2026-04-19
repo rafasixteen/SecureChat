@@ -12,6 +12,7 @@ namespace Client.Forms
             InitializeComponent();
         }
 
+        // Handler de sucesso no registo
         private void OnRegisterSuccess(byte[] data)
         {
             Invoke(() =>
@@ -23,6 +24,7 @@ namespace Client.Forms
             });
         }
 
+        // Handler de falhar no registo
         private void OnRegistrationFailed(byte[] data)
         {
             Invoke(() =>
@@ -32,6 +34,7 @@ namespace Client.Forms
             });
         }
 
+        // Clique do botão de registo, envia packet de registo
         private async void ButtonRegister_Click(object sender, EventArgs e)
         {
             string username = _usernameTextBox.Text;
@@ -40,12 +43,14 @@ namespace Client.Forms
             await AppSession.Connection.SendRegistrationPacketAsync(username, password);
         }
 
+        // On Load, quando o form inicia, configurar os handlers para os eventos corretos
         private void RegisterForm_Load(object sender, EventArgs e)
         {
             AppSession.Connection.On("register-success", OnRegisterSuccess);
             AppSession.Connection.On("register-failed", OnRegistrationFailed);
         }
 
+        // Link label para ir para o form de login
         private void HaveAccountLinkLabel_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
         {
             SwitchToOther();

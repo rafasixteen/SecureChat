@@ -12,6 +12,7 @@ namespace Client.Forms
             InitializeComponent();
         }
 
+        // Ao iniciar o formulário, configurar a lista de amigos, registrar os eventos de mudança de username e login, e tentar estabelecer uma conexão com o servidor.
         private async void ChatForm_Load(object sender, EventArgs e)
         {
             _friendsList.DataSource = AppSession.FriendUsernames;
@@ -41,6 +42,7 @@ namespace Client.Forms
             AppSession.Connection.Dispose();
         }
 
+        // Handler de receber lista de amigos
         private void OnFriendsListReceived(byte[] data)
         {
             Invoke(() =>
@@ -49,6 +51,7 @@ namespace Client.Forms
 
                 AppSession.FriendUsernames.Clear();
 
+                // Adiciona os amigos recebidos à lista de amigos na AppSession
                 foreach (string friend in response.FriendUsernames)
                 {
                     AppSession.FriendUsernames.Add(friend);
@@ -58,6 +61,7 @@ namespace Client.Forms
             });
         }
 
+        // Handler de falha ao receber a lista de amigos, que pode ocorrer se o cliente não estiver autenticado ou se houver um erro no servidor.
         private void OnFriendsListRejected(byte[] data)
         {
             Invoke(() =>
@@ -67,6 +71,7 @@ namespace Client.Forms
             });
         }
 
+        // Handler de receber a conversa com um amigo, que inclui uma lista de mensagens trocadas entre o utilizador autenticado e o amigo selecionado.
         private void OnGetConversationSuccess(byte[] data)
         {
             Invoke(() =>
@@ -84,6 +89,7 @@ namespace Client.Forms
             });
         }
 
+        // Handler de falha ao receber a conversa, que pode ocorrer se o cliente não estiver autenticado, se o amigo selecionado não existir ou se houver um erro no servidor.
         private void OnGetConversationFailed(byte[] data)
         {
             Invoke(() =>
@@ -93,6 +99,7 @@ namespace Client.Forms
             });
         }
 
+        // Handler de sucesso (Não faz nada)
         private void OnSendMessageSuccess(byte[] data)
         {
             Invoke(() =>
@@ -101,6 +108,7 @@ namespace Client.Forms
             });
         }
 
+        // Handler de falha ao enviar uma mensagem, que pode ocorrer se o cliente não estiver autenticado, se o amigo selecionado não existir ou se houver um erro no servidor.
         private void OnSendMessageFailed(byte[] data)
         {
             Invoke(() =>
@@ -113,6 +121,7 @@ namespace Client.Forms
             });
         }
 
+        // Handler de receber mensagens em tempo real
         private void OnMessageReceived(byte[] data)
         {
             // TODO: Fix Me - If the message was sent from 2 different clients, the message will be displayed in the chat panel
@@ -127,6 +136,7 @@ namespace Client.Forms
             });
         }
 
+        // Handler de falha do servidor
         private void OnServerFailed(byte[] data)
         {
             Invoke(() =>
@@ -136,6 +146,7 @@ namespace Client.Forms
             });
         }
 
+        // Handler de login, que é chamado quando o utilizador efetua login com sucesso. Regista os handlers para os eventos relacionados com a sessão do utilizador e solicita a lista de amigos ao servidor.
         private async void AppSession_LoggedIn()
         {
             AppSession.Connection.On("friends-list-success", OnFriendsListReceived);
@@ -157,6 +168,7 @@ namespace Client.Forms
             _usernameLabel.Text = username ?? "Not logged in";
         }
 
+        // Função para adicionar mensagens à caixa de mensagens
         private void AddMessage(string text, DateTime sentAt, bool received)
         {
             // TODO: Implement a more sophisticated message display with timestamps and sender information.
@@ -175,35 +187,43 @@ namespace Client.Forms
             _chatPanel.ScrollControlIntoView(msg);
         }
 
+        // Função de limpar as mensagens da caixa de mensagens
         private void ClearMessages()
         {
             _chatPanel.Controls.Clear();
         }
 
+        // Handler de mudar a conversa com utilizador
         private async void FriendsList_SelectedIndexChanged(object sender, EventArgs e)
         {
             if (_friendsList.SelectedItem is string selectedFriend)
                 await AppSession.Connection.RequestConversation(selectedFriend);
         }
 
+        // Função de enviar mensagens, chamada quando o utilizador clica no botão de enviar
         private async void SendButton_Click(object sender, EventArgs e)
         {
             string message = _messageTextBox.Text.Trim();
 
+            // Verifica se está vazia
             if (string.IsNullOrEmpty(message))
                 return;
 
+            // Verifica se já escolheu um amigo para enviar mensagem
             if (_friendsList.SelectedItem is not string selectedFriend)
             {
                 MessageBox.Show("Please select a friend to send the message to.", "No Friend Selected", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
-            // Local update of the chat panel to show the message immediately.
+            // Atualização local da mensagem a aparecer
             AddMessage(message, DateTime.UtcNow, received: false);
+
+            // Enviar mensagem para o outro cliente
             await AppSession.Connection.SendMessage(selectedFriend, message);
         }
 
+        // Função para fazer mostrar o form de autenticação (login)
         private void ShowAuthForm<T>() where T : AuthForm, new()
         {
             using AuthForm form = new T();
