@@ -1,10 +1,17 @@
 ﻿using Client.Transport;
+using EI.SI;
 using Shared.DTOs;
 
 namespace Client.Extensions
 {
     internal static class ClientConnectionExtensions
     {
+        public static async Task SendEotPacketAsync(this ClientConnection session)
+        {
+            await session.SendPacketAsync(ProtocolSICmdType.EOT, []);
+            Console.WriteLine("[Client] Sending EOT packet");
+        }
+
         public static async Task SendRegistrationPacketAsync(this ClientConnection session, string username, string password)
         {
             byte[] payload = Serializer.Serialize(new RegisterRequest(username, password));

@@ -23,13 +23,13 @@ namespace Server.PacketHandlers.Application
 
             AppDbContext db = new();
 
-            Guid senderId = db.Users.First(u => u.Username == username).Id;
-            Guid receiverId = db.Users.First(u => u.Username == request.FriendUsername).Id;
+            User sender = db.Users.First(u => u.Username == username);
+            User receiver = db.Users.First(u => u.Username == request.FriendUsername);
 
             db.Messages.Add(new Message
             {
-                SenderId = senderId,
-                ReceiverId = receiverId,
+                SenderId = sender.Id,
+                ReceiverId = receiver.Id,
                 Content = request.Message,
                 SentAt = DateTime.UtcNow
             });
@@ -38,13 +38,13 @@ namespace Server.PacketHandlers.Application
 
             await Program.SendPacketAsync(client, "send-message-success", "Message sent successfully.");
 
-            TcpClient? receiver = _connectionManager.GetClientByUsername(request.FriendUsername);
+            TcpClient? receiverClient = _connectionManager.GetClientByUsername(request.FriendUsername);
 
             // If client is online, send them a notification about the new message.
-            if (receiver != null)
+            if (receiverClient != null)
             {
-                MessageResponse message = new(request.Message, DateTime.UtcNow, true);
-                await Program.SendPacketAsync(receiver, "message-received", Serializer.Serialize(message));
+                MessageResponse message = new(request.Message, DateTime.UtcNow, sender.Username);
+                await Program.SendPacketAsync(receiverClient, "message-received", Serializer.Serialize(message));
             }
         }
     }

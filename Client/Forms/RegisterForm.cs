@@ -1,4 +1,5 @@
 ﻿using Client.Extensions;
+using Client.State;
 using Shared.DTOs;
 using Shared.DTOs.Shared.DTOs;
 using System.Text;
@@ -17,8 +18,8 @@ namespace Client.Forms
             Invoke(() =>
             {
                 RegisterResponse response = Serializer.Deserialize<RegisterResponse>(data);
-                AppSession.Username.Value = response.Username;
-                AppSession.LoggedIn?.Invoke();
+                AppState.Username.Value = response.Username;
+                AppState.LoggedIn?.Invoke();
                 Close();
             });
         }
@@ -37,13 +38,13 @@ namespace Client.Forms
             string username = _usernameTextBox.Text;
             string password = _passwordTextBox.Text;
 
-            await AppSession.Connection.SendRegistrationPacketAsync(username, password);
+            await AppState.Connection.SendRegistrationPacketAsync(username, password);
         }
 
         private void RegisterForm_Load(object sender, EventArgs e)
         {
-            AppSession.Connection.On("register-success", OnRegisterSuccess);
-            AppSession.Connection.On("register-failed", OnRegistrationFailed);
+            AppState.Connection.On("register-success", OnRegisterSuccess);
+            AppState.Connection.On("register-failed", OnRegistrationFailed);
         }
 
         private void HaveAccountLinkLabel_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)

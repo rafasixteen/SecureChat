@@ -1,4 +1,5 @@
 ﻿using Client.Extensions;
+using Client.State;
 using Shared.DTOs;
 using System.Text;
 
@@ -16,8 +17,8 @@ namespace Client.Forms
             Invoke(() =>
             {
                 LoginResponse response = Serializer.Deserialize<LoginResponse>(data);
-                AppSession.Username.Value = response.Username;
-                AppSession.LoggedIn?.Invoke();
+                AppState.Username.Value = response.Username;
+                AppState.LoggedIn?.Invoke();
                 Close();
             });
         }
@@ -36,13 +37,13 @@ namespace Client.Forms
             string username = _textBoxUsername.Text;
             string password = _textBoxPassword.Text;
 
-            await AppSession.Connection.SendLoginPacketAsync(username, password);
+            await AppState.Connection.SendLoginPacketAsync(username, password);
         }
 
         private void LoginForm_Load(object sender, EventArgs e)
         {
-            AppSession.Connection.On("login-success", OnLoginSuccess);
-            AppSession.Connection.On("login-failed", OnLoginFailed);
+            AppState.Connection.On("login-success", OnLoginSuccess);
+            AppState.Connection.On("login-failed", OnLoginFailed);
         }
 
         private void CreateAccountLinkLabel_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)

@@ -32,6 +32,7 @@ namespace Server
 
             _protocolDispacter.With(ProtocolSICmdType.SYM_CIPHER_DATA, new SymmetricDataHandler(_connectionManager, _applicationDispatcher));
             _protocolDispacter.With(ProtocolSICmdType.SECRET_KEY, new SecretKeyHandler(_connectionManager, Rsa));
+            _protocolDispacter.With(ProtocolSICmdType.EOT, new EotPacketHandler(_connectionManager));
 
             _applicationDispatcher.With("register", new RegisterHandler(_connectionManager));
             _applicationDispatcher.With("login", new LoginHandler(_connectionManager));

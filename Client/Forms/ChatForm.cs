@@ -1,4 +1,5 @@
 ﻿using Client.Extensions;
+using Client.State;
 using Client.Transport;
 using Shared.DTOs;
 using System.Text;
@@ -12,20 +13,38 @@ namespace Client.Forms
             InitializeComponent();
         }
 
+        #region Control Event Handlers
+
         private async void ChatForm_Load(object sender, EventArgs e)
         {
-            _friendsList.DataSource = AppSession.FriendUsernames;
+            _friendsList.DrawMode = DrawMode.OwnerDrawFixed;
+            _friendsList.DrawItem += (s, e) =>
+            {
+                if (e.Index < 0) return;
 
-            AppSession.Username.ValueChanged += Username_ValueChanged;
-            AppSession.LoggedIn += AppSession_LoggedIn;
+                if (_friendsList.Items[e.Index] is Friend friend)
+                {
+                    e.DrawBackground();
+
+                    Brush brush = friend.NotificationCount > 0 ? Brushes.Green : Brushes.Black;
+                    e.Graphics.DrawString(friend.ToString(), e.Font!, brush, e.Bounds);
+
+                    e.DrawFocusRectangle();
+                }
+            };
+
+            _friendsList.DataSource = AppState.FriendUsernames;
+
+            AppState.Username.ValueChanged += Username_ValueChanged;
+            AppState.LoggedIn += AppSession_LoggedIn;
 
             try
             {
-                AppSession.Connection = new ClientConnection("127.0.0.1", 8080);
-                await AppSession.Connection.PerformHandshakeAsync();
+                AppState.Connection = new ClientConnection("127.0.0.1", 8080);
+                await AppState.Connection.PerformHandshakeAsync();
 
-                AppSession.Connection.On("server-failed", OnServerFailed);
-                AppSession.Connection.StartListening();
+                AppState.Connection.On("server-failed", OnServerFailed);
+                AppState.Connection.StartListening();
 
                 ShowAuthForm<LoginForm>();
             }
@@ -35,11 +54,52 @@ namespace Client.Forms
             }
         }
 
-        private void ChatForm_FormClosing(object sender, FormClosingEventArgs e)
+        private async void ChatForm_FormClosing(object sender, FormClosingEventArgs e)
         {
-            // TODO: Make the client send a EOT packet to the server before closing the connection.
-            AppSession.Connection.Dispose();
+            await AppState.Connection.SendEotPacketAsync();
+            AppState.Connection.Dispose();
         }
+
+        private async void FriendsList_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (_friendsList.SelectedItem is Friend friend)
+            {
+                await AppState.Connection.RequestConversation(friend.Username);
+
+                ClearNotificationCount(friend.Username);
+                ClearMessages();
+            }
+        }
+
+        private async void SendButton_Click(object sender, EventArgs e)
+        {
+            string message = _messageTextBox.Text.Trim();
+
+            if (string.IsNullOrEmpty(message))
+                return;
+
+            if (_friendsList.SelectedItem is not Friend friend)
+            {
+                MessageBox.Show("Please select a friend to send the message to.", "No Friend Selected", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            if (AppState.Username.Value == null)
+            {
+                MessageBox.Show("You must be logged in to send messages.", "Not Logged In", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            // Local update of the chat panel to show the message immediately.
+            AddMessage(message, DateTime.UtcNow, AppState.Username.Value);
+            _messageTextBox.Clear();
+
+            await AppState.Connection.SendMessage(friend.Username, message);
+        }
+
+        #endregion
+
+        #region Packet Handlers
 
         private void OnFriendsListReceived(byte[] data)
         {
@@ -47,11 +107,11 @@ namespace Client.Forms
             {
                 FriendsListResponse response = Serializer.Deserialize<FriendsListResponse>(data);
 
-                AppSession.FriendUsernames.Clear();
+                AppState.FriendUsernames.Clear();
 
-                foreach (string friend in response.FriendUsernames)
+                foreach (string username in response.FriendUsernames)
                 {
-                    AppSession.FriendUsernames.Add(friend);
+                    AppState.FriendUsernames.Add(new Friend(username));
                 }
 
                 _friendsList.SelectedItem = null;
@@ -75,11 +135,9 @@ namespace Client.Forms
 
                 Console.WriteLine($"[Client] Received conversation with {response.Messages.Count} messages.");
 
-                ClearMessages();
-
                 foreach (MessageResponse message in response.Messages)
                 {
-                    AddMessage(message.Content, message.SentAt, message.Received);
+                    AddMessage(message.Content, message.SentAt, message.SenderUsername);
                 }
             });
         }
@@ -115,15 +173,18 @@ namespace Client.Forms
 
         private void OnMessageReceived(byte[] data)
         {
-            // TODO: Fix Me - If the message was sent from 2 different clients, the message will be displayed in the chat panel
-            // even if the user is not currently viewing the conversation with that friend. Consider adding a number of unread
-            // messages next to the friend's name in the friends list, and only display the message in the chat panel if the
-            // user is currently viewing that conversation.
-
             Invoke(() =>
             {
                 MessageResponse response = Serializer.Deserialize<MessageResponse>(data);
-                AddMessage(response.Content, response.SentAt, response.Received);
+
+                if (_friendsList.SelectedItem is Friend friend && response.SenderUsername == friend.Username)
+                {
+                    AddMessage(response.Content, response.SentAt, response.SenderUsername);
+                }
+                else
+                {
+                    IncrementNotificationCount(response.SenderUsername);
+                }
             });
         }
 
@@ -136,20 +197,22 @@ namespace Client.Forms
             });
         }
 
+        #endregion
+
         private async void AppSession_LoggedIn()
         {
-            AppSession.Connection.On("friends-list-success", OnFriendsListReceived);
-            AppSession.Connection.On("friends-list-failed", OnFriendsListRejected);
+            AppState.Connection.On("friends-list-success", OnFriendsListReceived);
+            AppState.Connection.On("friends-list-failed", OnFriendsListRejected);
 
-            AppSession.Connection.On("get-conversation-success", OnGetConversationSuccess);
-            AppSession.Connection.On("get-conversation-failed", OnGetConversationFailed);
+            AppState.Connection.On("get-conversation-success", OnGetConversationSuccess);
+            AppState.Connection.On("get-conversation-failed", OnGetConversationFailed);
 
-            AppSession.Connection.On("send-message-success", OnSendMessageSuccess);
-            AppSession.Connection.On("send-message-failed", OnSendMessageFailed);
+            AppState.Connection.On("send-message-success", OnSendMessageSuccess);
+            AppState.Connection.On("send-message-failed", OnSendMessageFailed);
 
-            AppSession.Connection.On("message-received", OnMessageReceived);
+            AppState.Connection.On("message-received", OnMessageReceived);
 
-            await AppSession.Connection.RequestFriendsList();
+            await AppState.Connection.RequestFriendsList();
         }
 
         private void Username_ValueChanged(string? username)
@@ -157,9 +220,11 @@ namespace Client.Forms
             _usernameLabel.Text = username ?? "Not logged in";
         }
 
-        private void AddMessage(string text, DateTime sentAt, bool received)
+        private void AddMessage(string text, DateTime sentAt, string senderUsername)
         {
             // TODO: Implement a more sophisticated message display with timestamps and sender information.
+
+            bool received = senderUsername != AppState.Username.Value;
 
             Label msg = new()
             {
@@ -180,28 +245,26 @@ namespace Client.Forms
             _chatPanel.Controls.Clear();
         }
 
-        private async void FriendsList_SelectedIndexChanged(object sender, EventArgs e)
+        private void IncrementNotificationCount(string friendUsername)
         {
-            if (_friendsList.SelectedItem is string selectedFriend)
-                await AppSession.Connection.RequestConversation(selectedFriend);
+            Friend? friend = AppState.FriendUsernames.FirstOrDefault(f => f.Username == friendUsername);
+
+            if (friend != null)
+            {
+                friend.NotificationCount++;
+                _friendsList.Refresh();
+            }
         }
 
-        private async void SendButton_Click(object sender, EventArgs e)
+        private void ClearNotificationCount(string friendUsername)
         {
-            string message = _messageTextBox.Text.Trim();
+            Friend? friend = AppState.FriendUsernames.FirstOrDefault(f => f.Username == friendUsername);
 
-            if (string.IsNullOrEmpty(message))
-                return;
-
-            if (_friendsList.SelectedItem is not string selectedFriend)
+            if (friend != null)
             {
-                MessageBox.Show("Please select a friend to send the message to.", "No Friend Selected", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
+                friend.NotificationCount = 0;
+                _friendsList.Refresh();
             }
-
-            // Local update of the chat panel to show the message immediately.
-            AddMessage(message, DateTime.UtcNow, received: false);
-            await AppSession.Connection.SendMessage(selectedFriend, message);
         }
 
         private void ShowAuthForm<T>() where T : AuthForm, new()

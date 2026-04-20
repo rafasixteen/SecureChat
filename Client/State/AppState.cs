@@ -2,9 +2,9 @@ using Client.Transport;
 using Shared;
 using System.ComponentModel;
 
-namespace Client
+namespace Client.State
 {
-    public static class AppSession
+    public static class AppState
     {
         private static ClientConnection? _connection;
 
@@ -32,7 +32,7 @@ namespace Client
 
         public static ObservableValue<string?> Username { get; } = new(null);
 
-        public static BindingList<string> FriendUsernames { get; } = new();
+        public static BindingList<Friend> FriendUsernames { get; } = new();
 
         public static Action? LoggedIn;
     }

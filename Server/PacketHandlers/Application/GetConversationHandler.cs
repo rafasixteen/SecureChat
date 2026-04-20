@@ -39,7 +39,7 @@ namespace Server.PacketHandlers.Application
                 messages.Select(m => new MessageResponse(
                     m.Content,
                     m.SentAt,
-                    m.SenderId == sender.Id
+                   sender.Username
                 )).ToList()
             );
 
