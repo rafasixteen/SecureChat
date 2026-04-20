@@ -1,4 +1,5 @@
-﻿using Server.Data;
+﻿using Microsoft.EntityFrameworkCore;
+using Server.Data;
 using Server.Data.Models;
 using Server.Transport.Connection;
 using Shared.DTOs;
@@ -28,7 +29,7 @@ namespace Server.PacketHandlers.Application
             User sender = db.Users.First(u => u.Username == username);
             User receiver = db.Users.First(u => u.Username == friendUsername);
 
-            List<Message>? messages = db.Messages
+            List<Message>? messages = db.Messages.Include(m => m.Sender)
                 .Where(m =>
                      (m.SenderId == sender.Id && m.ReceiverId == receiver.Id) ||
                      (m.SenderId == receiver.Id && m.ReceiverId == sender.Id))
@@ -39,7 +40,7 @@ namespace Server.PacketHandlers.Application
                 messages.Select(m => new MessageResponse(
                     m.Content,
                     m.SentAt,
-                   sender.Username
+                    m.Sender.Username
                 )).ToList()
             );
 
