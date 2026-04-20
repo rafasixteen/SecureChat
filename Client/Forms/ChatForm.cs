@@ -177,6 +177,8 @@ namespace Client.Forms
             {
                 MessageResponse response = Serializer.Deserialize<MessageResponse>(data);
 
+                Console.WriteLine($"[Client] Received message from {response.SenderUsername}: {response.Content}");
+
                 if (_friendsList.SelectedItem is Friend friend && response.SenderUsername == friend.Username)
                 {
                     AddMessage(response.Content, response.SentAt, response.SenderUsername);
@@ -222,22 +224,62 @@ namespace Client.Forms
 
         private void AddMessage(string text, DateTime sentAt, string senderUsername)
         {
-            // TODO: Implement a more sophisticated message display with timestamps and sender information.
+            bool isReceived = senderUsername != AppState.Username.Value;
 
-            bool received = senderUsername != AppState.Username.Value;
-
-            Label msg = new()
+            // Use FlowLayoutPanel for the bubble so labels stack vertically
+            FlowLayoutPanel bubble = new()
             {
-                Text = text,
                 AutoSize = true,
                 MaximumSize = new Size(300, 0),
                 Padding = new Padding(10),
-                BackColor = received ? Color.LightGray : Color.LightBlue,
-                Anchor = received ? AnchorStyles.Right : AnchorStyles.Left,
+                BackColor = isReceived ? Color.LightGray : Color.LightBlue,
+                FlowDirection = FlowDirection.TopDown,
+                WrapContents = false,
             };
 
-            _chatPanel.Controls.Add(msg);
-            _chatPanel.ScrollControlIntoView(msg);
+            Label messageLabel = new()
+            {
+                Text = text,
+                AutoSize = true,
+                MaximumSize = new Size(280, 0),
+                Margin = new Padding(0, 0, 0, 2),
+            };
+
+            Label timeLabel = new()
+            {
+                Text = sentAt.ToLocalTime().ToString("HH:mm"),
+                AutoSize = true,
+                Font = new Font(FontFamily.GenericSansSerif, 7),
+                ForeColor = Color.Gray,
+                Margin = new Padding(0),
+            };
+
+            bubble.Controls.Add(messageLabel);
+            bubble.Controls.Add(timeLabel);
+
+            // Container panel — full width so we can anchor the bubble left or right
+            Panel container = new()
+            {
+                AutoSize = true,
+                MinimumSize = new Size(_chatPanel.ClientSize.Width - 20, 0),
+                Margin = new Padding(0, 2, 0, 2),
+            };
+
+            // Add bubble first so it gets AutoSized, then reposition
+            container.Controls.Add(bubble);
+            bubble.Location = new Point(0, 0); // temporary; repositioned below
+
+            // Reposition after the bubble has been sized by the layout engine
+            container.Layout += (_, _) =>
+            {
+                if (!isReceived)
+                    bubble.Left = container.ClientSize.Width - bubble.Width - 5;
+                else
+                    bubble.Left = 5;
+            };
+
+            _chatPanel.Controls.Add(container);
+            _chatPanel.ScrollControlIntoView(container);
         }
 
         private void ClearMessages()
