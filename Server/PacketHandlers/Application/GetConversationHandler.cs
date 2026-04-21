@@ -11,9 +11,9 @@ namespace Server.PacketHandlers.Application
     {
         private readonly ConnectionManager _connectionManager = connectionManager;
 
-        // The hard limit is 1400 (due to ProtocolSI), but we use 1024 to be
-        // safe and leave room for encryption overhead and other metadata.
-        private const int MaxPacketSize = 1024;
+        // The hard limit is 1400 (due to ProtocolSI), but we use 512 to be
+        // safe and leave room for encryption overhead and JSON serialization.
+        private const int MaxPacketSize = 512;
 
         public async Task HandleAsync(TcpClient client, byte[] payload)
         {
@@ -65,7 +65,7 @@ namespace Server.PacketHandlers.Application
                 {
                     Console.WriteLine($"[GetConversation] Sending packet {packetIndex} with {buffer.Count} messages (~{currentSize} bytes)");
 
-                    SendChunk(client, buffer);
+                    await SendChunk(client, buffer);
 
                     totalSent += buffer.Count;
                     packetIndex++;
@@ -83,14 +83,14 @@ namespace Server.PacketHandlers.Application
             {
                 Console.WriteLine($"[GetConversation] Sending final packet {packetIndex} with {buffer.Count} messages (~{currentSize} bytes)");
 
-                SendChunk(client, buffer);
+                await SendChunk(client, buffer);
                 totalSent += buffer.Count;
             }
 
             Console.WriteLine($"[GetConversation] Done. Sent {totalSent}/{messageResponses.Count} messages in {packetIndex + 1} packets.");
         }
 
-        private static async void SendChunk(TcpClient client, List<MessageResponse> messages)
+        private static async Task SendChunk(TcpClient client, List<MessageResponse> messages)
         {
             GetConversationResponse packet = new(messages);
             byte[] data = Serializer.Serialize(packet);
