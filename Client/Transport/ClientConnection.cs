@@ -122,37 +122,22 @@ namespace Client.Transport
         private async Task ListenLoopAsync(CancellationToken token)
         {
             (byte[] aesKey, byte[] aesIv) = GetKeys();
-            byte[] header = new byte[3];
 
             try
             {
                 while (!token.IsCancellationRequested)
                 {
-                    // 1. Read the fixed 3-byte header (cmd + 2 length bytes)
-                    int headerRead = await ReadExactAsync(header, 0, 3, token).ConfigureAwait(false);
+                    // Read header into the protocol buffer
+                    await _stream.ReadExactlyAsync(_protocol.Buffer.AsMemory(0, 3), token).ConfigureAwait(false);
 
-                    if (headerRead == 0)
-                        break;
+                    int dataLength = _protocol.GetDataLength();
 
-                    ProtocolSICmdType commandType = (ProtocolSICmdType)header[0];
-                    int dataLength = header[1] * 256 + header[2];
-
-                    if (dataLength > 1400)
-                        throw new Exception($"Declared data length {dataLength} exceeds MAX_DATA_LENGTH.");
-
-                    // 2. Read exactly `dataLength` bytes of payload
-                    byte[] payload = new byte[dataLength];
-
+                    // Read payload directly into the protocol buffer after the header
                     if (dataLength > 0)
-                    {
-                        int payloadRead = await ReadExactAsync(payload, 0, dataLength, token).ConfigureAwait(false);
+                        await _stream.ReadExactlyAsync(_protocol.Buffer.AsMemory(3, dataLength), token).ConfigureAwait(false);
 
-                        if (payloadRead < dataLength)
-                            break; // disconnected mid-packet
-                    }
-
-                    // 3. Decrypt and dispatch
-                    byte[] decrypted = AesUtils.Decrypt(payload, aesKey, aesIv);
+                    byte[] decrypted = AesUtils.Decrypt(_protocol.GetData(), aesKey, aesIv);
+                    ProtocolSICmdType commandType = _protocol.GetCmdType();
 
                     if (commandType == ProtocolSICmdType.SYM_CIPHER_DATA)
                     {
@@ -172,28 +157,10 @@ namespace Client.Transport
                     }
                 }
             }
-            catch (OperationCanceledException) { }
             catch (Exception ex)
             {
                 Console.WriteLine($"[Client] Listener error: {ex.Message}");
             }
-        }
-
-        private async Task<int> ReadExactAsync(byte[] buffer, int offset, int count, CancellationToken token)
-        {
-            int totalRead = 0;
-
-            while (totalRead < count)
-            {
-                int bytesRead = await _stream.ReadAsync(buffer.AsMemory(offset + totalRead, count - totalRead), token).ConfigureAwait(false);
-
-                if (bytesRead == 0)
-                    return totalRead;
-
-                totalRead += bytesRead;
-            }
-
-            return totalRead;
         }
 
         #endregion
