@@ -122,19 +122,36 @@ namespace Client.Transport
         private async Task ListenLoopAsync(CancellationToken token)
         {
             (byte[] aesKey, byte[] aesIv) = GetKeys();
+            byte[] header = new byte[3];
 
             try
             {
                 while (!token.IsCancellationRequested)
                 {
-                    int bytesRead = await _stream.ReadAsync(_protocol.Buffer, token).ConfigureAwait(false);
+                    // 1. Read the fixed 3-byte header (cmd + 2 length bytes)
+                    int headerRead = await ReadExactAsync(header, 0, 3, token).ConfigureAwait(false);
 
-                    if (bytesRead == 0)
+                    if (headerRead == 0)
                         break;
 
-                    ProtocolSICmdType commandType = _protocol.GetCmdType();
+                    ProtocolSICmdType commandType = (ProtocolSICmdType)header[0];
+                    int dataLength = header[1] * 256 + header[2];
 
-                    byte[] payload = _protocol.GetData();
+                    if (dataLength > 1400)
+                        throw new Exception($"Declared data length {dataLength} exceeds MAX_DATA_LENGTH.");
+
+                    // 2. Read exactly `dataLength` bytes of payload
+                    byte[] payload = new byte[dataLength];
+
+                    if (dataLength > 0)
+                    {
+                        int payloadRead = await ReadExactAsync(payload, 0, dataLength, token).ConfigureAwait(false);
+
+                        if (payloadRead < dataLength)
+                            break; // disconnected mid-packet
+                    }
+
+                    // 3. Decrypt and dispatch
                     byte[] decrypted = AesUtils.Decrypt(payload, aesKey, aesIv);
 
                     if (commandType == ProtocolSICmdType.SYM_CIPHER_DATA)
@@ -142,27 +159,41 @@ namespace Client.Transport
                         Envelope env = Serializer.Deserialize<Envelope>(decrypted);
 
                         if (!_applicationHandlers.TryGetValue(env.CommandType, out PacketHandler? appHandler))
-                            throw new Exception($"No application handler registered for command type: {env.CommandType}");
+                            throw new Exception($"No application handler for: {env.CommandType}");
 
                         appHandler.Invoke(env.Payload);
                     }
                     else
                     {
                         if (!_protocolHandlers.TryGetValue(commandType, out PacketHandler? protocolHandler))
-                            throw new Exception($"No protocol handler registered for command type: {commandType}");
+                            throw new Exception($"No protocol handler for: {commandType}");
 
                         protocolHandler.Invoke(decrypted);
                     }
                 }
             }
-            catch (OperationCanceledException)
-            {
-                // Expected on shutdown
-            }
+            catch (OperationCanceledException) { }
             catch (Exception ex)
             {
                 Console.WriteLine($"[Client] Listener error: {ex.Message}");
             }
+        }
+
+        private async Task<int> ReadExactAsync(byte[] buffer, int offset, int count, CancellationToken token)
+        {
+            int totalRead = 0;
+
+            while (totalRead < count)
+            {
+                int bytesRead = await _stream.ReadAsync(buffer.AsMemory(offset + totalRead, count - totalRead), token).ConfigureAwait(false);
+
+                if (bytesRead == 0)
+                    return totalRead;
+
+                totalRead += bytesRead;
+            }
+
+            return totalRead;
         }
 
         #endregion
