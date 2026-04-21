@@ -10,6 +10,8 @@ namespace Server.PacketHandlers.Application
     {
         private readonly ConnectionManager _connectionManager = connectionManager;
 
+        private const int MaxMessageLength = 256;
+
         public async Task HandleAsync(TcpClient client, byte[] payload)
         {
             if (!_connectionManager.IsAuthenticated(client))
@@ -30,7 +32,7 @@ namespace Server.PacketHandlers.Application
             {
                 SenderId = sender.Id,
                 ReceiverId = receiver.Id,
-                Content = request.Message,
+                Content = request.Message.Length > MaxMessageLength ? request.Message.Substring(0, MaxMessageLength) : request.Message,
                 SentAt = DateTime.UtcNow
             });
 

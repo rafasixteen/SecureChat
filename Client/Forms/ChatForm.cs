@@ -8,6 +8,8 @@ namespace Client.Forms
 {
     public partial class ChatForm : Form
     {
+        private const int MaxMessageLength = 256;
+
         public ChatForm()
         {
             InitializeComponent();
@@ -84,6 +86,12 @@ namespace Client.Forms
                 return;
             }
 
+            if (message.Length > MaxMessageLength)
+            {
+                MessageBox.Show($"Message exceeds the maximum length of {MaxMessageLength} characters.", "Message Too Long", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             if (AppState.Username.Value == null)
             {
                 MessageBox.Show("You must be logged in to send messages.", "Not Logged In", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -95,6 +103,15 @@ namespace Client.Forms
             _messageTextBox.Clear();
 
             await AppState.Connection.SendMessage(friend.Username, message);
+        }
+
+        private void MessageTextBox_KeyPress(object sender, KeyPressEventArgs e)
+        {
+            if (e.KeyChar == (char)Keys.Enter && _messageTextBox.Focused)
+            {
+                SendButton_Click(sender, EventArgs.Empty);
+                e.Handled = true;
+            }
         }
 
         #endregion

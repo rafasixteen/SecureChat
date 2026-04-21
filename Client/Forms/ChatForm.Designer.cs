@@ -32,9 +32,9 @@
             _friendsList = new ListBox();
             _usernameLabel = new Label();
             groupBox2 = new GroupBox();
+            _chatPanel = new FlowLayoutPanel();
             _sendButton = new Button();
             _messageTextBox = new TextBox();
-            _chatPanel = new FlowLayoutPanel();
             groupBox1.SuspendLayout();
             groupBox2.SuspendLayout();
             SuspendLayout();
@@ -79,6 +79,17 @@
             groupBox2.TabStop = false;
             groupBox2.Text = "Chat";
             // 
+            // _chatPanel
+            // 
+            _chatPanel.AutoScroll = true;
+            _chatPanel.Dock = DockStyle.Fill;
+            _chatPanel.FlowDirection = FlowDirection.TopDown;
+            _chatPanel.Location = new Point(3, 23);
+            _chatPanel.Name = "_chatPanel";
+            _chatPanel.Size = new Size(606, 437);
+            _chatPanel.TabIndex = 0;
+            _chatPanel.WrapContents = false;
+            // 
             // _sendButton
             // 
             _sendButton.Location = new Point(717, 506);
@@ -95,17 +106,7 @@
             _messageTextBox.Name = "_messageTextBox";
             _messageTextBox.Size = new Size(501, 27);
             _messageTextBox.TabIndex = 1;
-            // 
-            // _chatPanel
-            // 
-            _chatPanel.AutoScroll = true;
-            _chatPanel.Dock = DockStyle.Fill;
-            _chatPanel.FlowDirection = FlowDirection.TopDown;
-            _chatPanel.Location = new Point(3, 23);
-            _chatPanel.Name = "_chatPanel";
-            _chatPanel.Size = new Size(606, 437);
-            _chatPanel.TabIndex = 0;
-            _chatPanel.WrapContents = false;
+            _messageTextBox.KeyPress += MessageTextBox_KeyPress;
             // 
             // ChatForm
             // 
