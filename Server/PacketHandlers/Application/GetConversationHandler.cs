@@ -11,6 +11,8 @@ namespace Server.PacketHandlers.Application
     {
         private readonly ConnectionManager _connectionManager = connectionManager;
 
+        // The hard limit is 1400 (due to ProtocolSI), but we use 1024 to be
+        // safe and leave room for encryption overhead and other metadata.
         private const int MaxPacketSize = 1024;
 
         public async Task HandleAsync(TcpClient client, byte[] payload)
