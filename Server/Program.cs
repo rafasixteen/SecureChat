@@ -101,10 +101,12 @@ namespace Server
         {
             while (client.Connected)
             {
-                int bytesRead = await stream.ReadAsync(protocol.Buffer.AsMemory(0, protocol.Buffer.Length));
+                await stream.ReadExactlyAsync(protocol.Buffer.AsMemory(0, 3)).ConfigureAwait(false);
 
-                if (bytesRead == 0)
-                    break;
+                int dataLength = protocol.GetDataLength();
+
+                if (dataLength > 0)
+                    await stream.ReadExactlyAsync(protocol.Buffer.AsMemory(3, dataLength)).ConfigureAwait(false);
 
                 ProtocolSICmdType commandType = protocol.GetCmdType();
                 byte[] payload = protocol.GetData();
