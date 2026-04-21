@@ -13,6 +13,50 @@ namespace Client.Forms
             InitializeComponent();
         }
 
+        #region Control Event Handlers
+
+        private void RegisterForm_Load(object sender, EventArgs e)
+        {
+            AppState.Connection.On("register-success", OnRegisterSuccess);
+            AppState.Connection.On("register-failed", OnRegistrationFailed);
+        }
+
+        private void RegisterForm_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            AppState.Connection.RemoveHandler("register-success");
+            AppState.Connection.RemoveHandler("register-failed");
+        }
+
+        private async void ButtonRegister_Click(object sender, EventArgs e)
+        {
+            string username = _usernameTextBox.Text.Trim();
+            string password = _passwordTextBox.Text.Trim();
+            string confirmedPassword = _confirmPasswordTextBox.Text.Trim();
+
+            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+            {
+                MessageBox.Show("Username and password cannot be empty.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            if (password != confirmedPassword)
+            {
+                MessageBox.Show("Passwords do not match.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            await AppState.Connection.SendRegistrationPacketAsync(username, password);
+        }
+
+        private void HaveAccountLinkLabel_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
+        {
+            SwitchToOther();
+        }
+
+        #endregion
+
+        #region Packet Handlers
+
         private void OnRegisterSuccess(byte[] data)
         {
             Invoke(() =>
@@ -33,23 +77,6 @@ namespace Client.Forms
             });
         }
 
-        private async void ButtonRegister_Click(object sender, EventArgs e)
-        {
-            string username = _usernameTextBox.Text;
-            string password = _passwordTextBox.Text;
-
-            await AppState.Connection.SendRegistrationPacketAsync(username, password);
-        }
-
-        private void RegisterForm_Load(object sender, EventArgs e)
-        {
-            AppState.Connection.On("register-success", OnRegisterSuccess);
-            AppState.Connection.On("register-failed", OnRegistrationFailed);
-        }
-
-        private void HaveAccountLinkLabel_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
-        {
-            SwitchToOther();
-        }
+        #endregion
     }
 }

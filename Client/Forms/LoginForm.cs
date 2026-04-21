@@ -12,6 +12,37 @@ namespace Client.Forms
             InitializeComponent();
         }
 
+        #region Control Event Handlers
+
+        private void LoginForm_Load(object sender, EventArgs e)
+        {
+            AppState.Connection.On("login-success", OnLoginSuccess);
+            AppState.Connection.On("login-failed", OnLoginFailed);
+        }
+
+        private void LoginForm_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            AppState.Connection.RemoveHandler("login-success");
+            AppState.Connection.RemoveHandler("login-failed");
+        }
+
+        private async void LoginButton_Click(object sender, EventArgs e)
+        {
+            string username = _textBoxUsername.Text;
+            string password = _textBoxPassword.Text;
+
+            await AppState.Connection.SendLoginPacketAsync(username, password);
+        }
+
+        private void CreateAccountLinkLabel_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
+        {
+            SwitchToOther();
+        }
+
+        #endregion
+
+        #region Packet Handlers
+
         private void OnLoginSuccess(byte[] data)
         {
             Invoke(() =>
@@ -32,23 +63,6 @@ namespace Client.Forms
             });
         }
 
-        private async void LoginButton_Click(object sender, EventArgs e)
-        {
-            string username = _textBoxUsername.Text;
-            string password = _textBoxPassword.Text;
-
-            await AppState.Connection.SendLoginPacketAsync(username, password);
-        }
-
-        private void LoginForm_Load(object sender, EventArgs e)
-        {
-            AppState.Connection.On("login-success", OnLoginSuccess);
-            AppState.Connection.On("login-failed", OnLoginFailed);
-        }
-
-        private void CreateAccountLinkLabel_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
-        {
-            SwitchToOther();
-        }
+        #endregion
     }
 }

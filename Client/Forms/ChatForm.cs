@@ -37,8 +37,8 @@ namespace Client.Forms
 
             _friendsList.DataSource = AppState.FriendUsernames;
 
-            AppState.Username.ValueChanged += Username_ValueChanged;
-            AppState.LoggedIn += AppSession_LoggedIn;
+            AppState.Username.ValueChanged += OnUsernameChanged;
+            AppState.LoggedIn += OnLoggedIn;
 
             try
             {
@@ -47,6 +47,9 @@ namespace Client.Forms
 
                 AppState.Connection.On("server-failed", OnServerFailed);
                 AppState.Connection.StartListening();
+
+                // Small delay to give time for the ChatForm to show before the LoginForm appears.
+                await Task.Delay(500);
 
                 ShowAuthForm<LoginForm>();
             }
@@ -218,7 +221,9 @@ namespace Client.Forms
 
         #endregion
 
-        private async void AppSession_LoggedIn()
+        #region App State Events
+
+        private async void OnLoggedIn()
         {
             AppState.Connection.On("friends-list-success", OnFriendsListReceived);
             AppState.Connection.On("friends-list-failed", OnFriendsListRejected);
@@ -234,16 +239,17 @@ namespace Client.Forms
             await AppState.Connection.RequestFriendsList();
         }
 
-        private void Username_ValueChanged(string? username)
+        private void OnUsernameChanged(string? username)
         {
             _usernameLabel.Text = username ?? "Not logged in";
         }
+
+        #endregion
 
         private void AddMessage(string text, DateTime sentAt, string senderUsername)
         {
             bool isReceived = senderUsername != AppState.Username.Value;
 
-            // Use FlowLayoutPanel for the bubble so labels stack vertically
             FlowLayoutPanel bubble = new()
             {
                 AutoSize = true,
@@ -274,26 +280,25 @@ namespace Client.Forms
             bubble.Controls.Add(messageLabel);
             bubble.Controls.Add(timeLabel);
 
-            // Container panel — full width so we can anchor the bubble left or right
             Panel container = new()
             {
                 AutoSize = true,
-                MinimumSize = new Size(_chatPanel.ClientSize.Width - 20, 0),
                 Margin = new Padding(0, 2, 0, 2),
             };
 
-            // Add bubble first so it gets AutoSized, then reposition
             container.Controls.Add(bubble);
-            bubble.Location = new Point(0, 0); // temporary; repositioned below
 
-            // Reposition after the bubble has been sized by the layout engine
-            container.Layout += (_, _) =>
+            void PositionBubble()
             {
+                container.Width = _chatPanel.ClientSize.Width - 20;
+
                 if (!isReceived)
-                    bubble.Left = container.ClientSize.Width - bubble.Width - 5;
+                    bubble.Left = container.Width - bubble.Width - 5;
                 else
                     bubble.Left = 5;
-            };
+            }
+
+            container.Layout += (_, _) => PositionBubble();
 
             _chatPanel.Controls.Add(container);
             _chatPanel.ScrollControlIntoView(container);

@@ -74,7 +74,7 @@
             groupBox2.Controls.Add(_chatPanel);
             groupBox2.Location = new Point(210, 35);
             groupBox2.Name = "groupBox2";
-            groupBox2.Size = new Size(612, 463);
+            groupBox2.Size = new Size(738, 463);
             groupBox2.TabIndex = 4;
             groupBox2.TabStop = false;
             groupBox2.Text = "Chat";
@@ -86,13 +86,18 @@
             _chatPanel.FlowDirection = FlowDirection.TopDown;
             _chatPanel.Location = new Point(3, 23);
             _chatPanel.Name = "_chatPanel";
-            _chatPanel.Size = new Size(606, 437);
+            _chatPanel.Size = new Size(732, 437);
             _chatPanel.TabIndex = 0;
             _chatPanel.WrapContents = false;
+            _chatPanel.AutoScroll = true;
+            _chatPanel.WrapContents = false;
+            _chatPanel.FlowDirection = FlowDirection.TopDown;
+            _chatPanel.HorizontalScroll.Enabled = false;
+            _chatPanel.HorizontalScroll.Visible = false;
             // 
             // _sendButton
             // 
-            _sendButton.Location = new Point(717, 506);
+            _sendButton.Location = new Point(840, 501);
             _sendButton.Name = "_sendButton";
             _sendButton.Size = new Size(105, 29);
             _sendButton.TabIndex = 2;
@@ -102,9 +107,9 @@
             // 
             // _messageTextBox
             // 
-            _messageTextBox.Location = new Point(210, 507);
+            _messageTextBox.Location = new Point(210, 503);
             _messageTextBox.Name = "_messageTextBox";
-            _messageTextBox.Size = new Size(501, 27);
+            _messageTextBox.Size = new Size(627, 27);
             _messageTextBox.TabIndex = 1;
             _messageTextBox.KeyPress += MessageTextBox_KeyPress;
             // 
@@ -112,14 +117,17 @@
             // 
             AutoScaleDimensions = new SizeF(8F, 20F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(834, 546);
+            ClientSize = new Size(960, 540);
             Controls.Add(_messageTextBox);
             Controls.Add(_usernameLabel);
             Controls.Add(_sendButton);
             Controls.Add(groupBox2);
             Controls.Add(groupBox1);
+            FormBorderStyle = FormBorderStyle.FixedSingle;
             Margin = new Padding(3, 4, 3, 4);
+            MaximizeBox = false;
             Name = "ChatForm";
+            StartPosition = FormStartPosition.CenterScreen;
             Text = "Secure Chat";
             FormClosing += ChatForm_FormClosing;
             Load += ChatForm_Load;

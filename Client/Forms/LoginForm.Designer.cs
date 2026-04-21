@@ -38,25 +38,28 @@
             // 
             // _textBoxUsername
             // 
-            _textBoxUsername.Location = new Point(9, 27);
+            _textBoxUsername.Location = new Point(10, 36);
+            _textBoxUsername.Margin = new Padding(3, 4, 3, 4);
             _textBoxUsername.Name = "_textBoxUsername";
-            _textBoxUsername.Size = new Size(291, 23);
+            _textBoxUsername.Size = new Size(332, 27);
             _textBoxUsername.TabIndex = 0;
             // 
             // _textBoxPassword
             // 
-            _textBoxPassword.Location = new Point(9, 71);
+            _textBoxPassword.Location = new Point(10, 95);
+            _textBoxPassword.Margin = new Padding(3, 4, 3, 4);
             _textBoxPassword.Name = "_textBoxPassword";
             _textBoxPassword.PasswordChar = '*';
-            _textBoxPassword.Size = new Size(291, 23);
+            _textBoxPassword.Size = new Size(332, 27);
             _textBoxPassword.TabIndex = 1;
             _textBoxPassword.UseSystemPasswordChar = true;
             // 
             // _loginButton
             // 
-            _loginButton.Location = new Point(190, 100);
+            _loginButton.Location = new Point(217, 133);
+            _loginButton.Margin = new Padding(3, 4, 3, 4);
             _loginButton.Name = "_loginButton";
-            _loginButton.Size = new Size(110, 23);
+            _loginButton.Size = new Size(126, 31);
             _loginButton.TabIndex = 2;
             _loginButton.Text = "Log In";
             _loginButton.UseVisualStyleBackColor = true;
@@ -65,9 +68,9 @@
             // _createAccountLinkLabel
             // 
             _createAccountLinkLabel.AutoSize = true;
-            _createAccountLinkLabel.Location = new Point(9, 104);
+            _createAccountLinkLabel.Location = new Point(10, 139);
             _createAccountLinkLabel.Name = "_createAccountLinkLabel";
-            _createAccountLinkLabel.Size = new Size(65, 15);
+            _createAccountLinkLabel.Size = new Size(81, 20);
             _createAccountLinkLabel.TabIndex = 6;
             _createAccountLinkLabel.TabStop = true;
             _createAccountLinkLabel.Text = "Criar conta";
@@ -76,34 +79,38 @@
             // lbl_username
             // 
             lbl_username.AutoSize = true;
-            lbl_username.Location = new Point(9, 9);
+            lbl_username.Location = new Point(10, 12);
             lbl_username.Name = "lbl_username";
-            lbl_username.Size = new Size(60, 15);
+            lbl_username.Size = new Size(75, 20);
             lbl_username.TabIndex = 7;
             lbl_username.Text = "Username";
             // 
             // lbl_password
             // 
             lbl_password.AutoSize = true;
-            lbl_password.Location = new Point(9, 53);
+            lbl_password.Location = new Point(10, 71);
             lbl_password.Name = "lbl_password";
-            lbl_password.Size = new Size(57, 15);
+            lbl_password.Size = new Size(70, 20);
             lbl_password.TabIndex = 8;
             lbl_password.Text = "Password";
             // 
             // LoginForm
             // 
-            AutoScaleDimensions = new SizeF(7F, 15F);
+            AutoScaleDimensions = new SizeF(8F, 20F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(310, 132);
+            ClientSize = new Size(354, 176);
             Controls.Add(lbl_password);
             Controls.Add(lbl_username);
             Controls.Add(_createAccountLinkLabel);
             Controls.Add(_loginButton);
             Controls.Add(_textBoxPassword);
             Controls.Add(_textBoxUsername);
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            Margin = new Padding(3, 4, 3, 4);
             Name = "LoginForm";
-            Text = "Secure Chat - Login";
+            StartPosition = FormStartPosition.CenterParent;
+            Text = "Login";
+            FormClosing += LoginForm_FormClosing;
             Load += LoginForm_Load;
             ResumeLayout(false);
             PerformLayout();
