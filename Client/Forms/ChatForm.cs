@@ -127,7 +127,7 @@ namespace Client.Forms
             });
         }
 
-        private void OnGetConversationSuccess(byte[] data)
+        private void OnGetConversationChunk(byte[] data)
         {
             Invoke(() =>
             {
@@ -206,7 +206,7 @@ namespace Client.Forms
             AppState.Connection.On("friends-list-success", OnFriendsListReceived);
             AppState.Connection.On("friends-list-failed", OnFriendsListRejected);
 
-            AppState.Connection.On("get-conversation-success", OnGetConversationSuccess);
+            AppState.Connection.On("get-conversation-chunk", OnGetConversationChunk);
             AppState.Connection.On("get-conversation-failed", OnGetConversationFailed);
 
             AppState.Connection.On("send-message-success", OnSendMessageSuccess);
