@@ -16,6 +16,7 @@ namespace Server.PacketHandlers.Application
         {
             if (!_connectionManager.IsAuthenticated(client))
             {
+                Logger.Log($"Send message failed: client not authenticated.");
                 await Program.SendPacketAsync(client, "send-message-failed", "Client is not authenticated.");
                 return;
             }
@@ -38,6 +39,8 @@ namespace Server.PacketHandlers.Application
 
             await db.SaveChangesAsync();
 
+            Logger.Log($"Message sent from {sender.Username} to {receiver.Username}");
+
             await Program.SendPacketAsync(client, "send-message-success", "Message sent successfully.");
 
             TcpClient? receiverClient = _connectionManager.GetClientByUsername(request.FriendUsername);
@@ -47,6 +50,7 @@ namespace Server.PacketHandlers.Application
             {
                 MessageResponse message = new(request.Message, DateTime.UtcNow, sender.Username);
                 await Program.SendPacketAsync(receiverClient, "message-received", Serializer.Serialize(message));
+                Logger.Log($"Message delivered to online user: {receiver.Username}");
             }
         }
     }

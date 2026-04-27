@@ -18,7 +18,10 @@ namespace Server.PacketHandlers.Application
             RegisterRequest request = Serializer.Deserialize<RegisterRequest>(payload);
 
             if (!await ValidateInput(client, request))
+            {
+                Logger.Log($"Register failed (input validation) for user: {request.Username}");
                 return;
+            }
 
             using AppDbContext db = new();
 
@@ -26,6 +29,7 @@ namespace Server.PacketHandlers.Application
 
             if (userExists)
             {
+                Logger.Log($"Register failed (username taken) for user: {request.Username}");
                 await Program.SendPacketAsync(client, "register-failed", "Username already taken.");
                 return;
             }
@@ -48,7 +52,7 @@ namespace Server.PacketHandlers.Application
             byte[] responseData = Serializer.Serialize(response);
 
             await Program.SendPacketAsync(client, "register-success", responseData);
-            Console.WriteLine($"[Server] User registered: {request.Username}");
+            Logger.Log($"User registered: {request.Username}");
         }
 
         private static async Task<bool> ValidateInput(TcpClient client, RegisterRequest request)

@@ -29,6 +29,7 @@ namespace Server
         public static async Task Main(string[] args)
         {
             Console.WriteLine($"[Server] Starting on port {PORT}...");
+            Logger.Log($"Server starting on port {PORT}.");
 
             _protocolDispacter.With(ProtocolSICmdType.SYM_CIPHER_DATA, new SymmetricDataHandler(_connectionManager, _applicationDispatcher));
             _protocolDispacter.With(ProtocolSICmdType.SECRET_KEY, new SecretKeyHandler(_connectionManager, Rsa));
@@ -46,12 +47,14 @@ namespace Server
             listener.Start();
 
             Console.WriteLine("[Server] Listening...");
+            Logger.Log("Server listening for connections.");
             Console.WriteLine("[Server] Press ENTER to shut down.");
 
             _ = Task.Run(() =>
             {
                 Console.ReadLine();
                 Console.WriteLine("[Server] Shutdown requested...");
+                Logger.Log("Shutdown requested by user.");
                 cts.Cancel();
             });
 
@@ -60,6 +63,7 @@ namespace Server
                 while (!cts.IsCancellationRequested)
                 {
                     TcpClient client = await listener.AcceptTcpClientAsync(cts.Token);
+                    Logger.Log($"Client connected: {client.Client.RemoteEndPoint}");
                     _connectionManager.Connect(client);
                     _ = Task.Run(() => HandleClientAsync(client), cts.Token);
                 }
@@ -67,10 +71,12 @@ namespace Server
             catch (OperationCanceledException)
             {
                 Console.WriteLine("[Server] Shutdown signal received.");
+                Logger.Log("Shutdown signal received.");
             }
             finally
             {
                 listener.Stop();
+                Logger.Log("Server stopped.");
                 Console.WriteLine("[Server] Server stopped.");
             }
         }
@@ -84,15 +90,19 @@ namespace Server
 
             try
             {
+                Logger.Log($"Handshake started with client: {client.Client.RemoteEndPoint}");
                 await Handshake.SendPublicKey(client, Rsa);
+                Logger.Log($"Handshake completed with client: {client.Client.RemoteEndPoint}");
                 await ReceiveLoopAsync(client, protocol, stream);
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[Server] Client error {client.Client.RemoteEndPoint}: {ex.Message}");
+                Logger.LogError($"Client error {client.Client.RemoteEndPoint}", ex);
             }
             finally
             {
+                Logger.Log($"Client disconnected: {client.Client.RemoteEndPoint}");
                 _connectionManager.Disconnect(client);
             }
         }
@@ -113,17 +123,20 @@ namespace Server
 
                 try
                 {
+                    Logger.Log($"Received command {commandType} from {client.Client.RemoteEndPoint}");
                     await _protocolDispacter.DispatchAsync(client, commandType, payload);
                 }
                 catch (InvalidPacketException ex)
                 {
                     Console.WriteLine($"[Server] Invalid packet from {client.Client.RemoteEndPoint}: {ex.Message}");
+                    Logger.LogError($"Invalid packet from {client.Client.RemoteEndPoint}", ex);
                     _connectionManager.Disconnect(client);
                     break;
                 }
                 catch (Exception ex)
                 {
                     Console.WriteLine($"[Server] {commandType} error: {ex}");
+                    Logger.LogError($"Error processing command {commandType} from {client.Client.RemoteEndPoint}", ex);
                     await SendPacketAsync(client, "server-failed", "Internal server error");
                 }
             }

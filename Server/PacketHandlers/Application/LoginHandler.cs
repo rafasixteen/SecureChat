@@ -17,7 +17,10 @@ namespace Server.PacketHandlers.Application
             LoginRequest request = Serializer.Deserialize<LoginRequest>(payload);
 
             if (!await ValidateInput(client, request))
+            {
+                Logger.Log($"Login failed (input validation) for user: {request.Username}");
                 return;
+            }
 
             using AppDbContext db = new();
 
@@ -26,6 +29,7 @@ namespace Server.PacketHandlers.Application
 
             if (!valid)
             {
+                Logger.Log($"Login failed (invalid credentials) for user: {request.Username}");
                 await Program.SendPacketAsync(client, "login-failed", "Invalid username or password.");
                 return;
             }
@@ -36,7 +40,7 @@ namespace Server.PacketHandlers.Application
             byte[] responseData = Serializer.Serialize(response);
 
             await Program.SendPacketAsync(client, "login-success", responseData);
-            Console.WriteLine($"[Server] User logged in: {request.Username}");
+            Logger.Log($"User logged in: {request.Username}");
 
         }
 
