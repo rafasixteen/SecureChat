@@ -35,6 +35,7 @@
             _chatPanel = new FlowLayoutPanel();
             _sendButton = new Button();
             _messageTextBox = new TextBox();
+            _authButton = new Button();
             groupBox1.SuspendLayout();
             groupBox2.SuspendLayout();
             SuspendLayout();
@@ -61,7 +62,7 @@
             // _usernameLabel
             // 
             _usernameLabel.AutoSize = true;
-            _usernameLabel.Location = new Point(711, 12);
+            _usernameLabel.Location = new Point(18, 12);
             _usernameLabel.Name = "_usernameLabel";
             _usernameLabel.RightToLeft = RightToLeft.No;
             _usernameLabel.Size = new Size(102, 20);
@@ -89,11 +90,6 @@
             _chatPanel.Size = new Size(732, 437);
             _chatPanel.TabIndex = 0;
             _chatPanel.WrapContents = false;
-            _chatPanel.AutoScroll = true;
-            _chatPanel.WrapContents = false;
-            _chatPanel.FlowDirection = FlowDirection.TopDown;
-            _chatPanel.HorizontalScroll.Enabled = false;
-            _chatPanel.HorizontalScroll.Visible = false;
             // 
             // _sendButton
             // 
@@ -113,11 +109,22 @@
             _messageTextBox.TabIndex = 1;
             _messageTextBox.KeyPress += MessageTextBox_KeyPress;
             // 
+            // _authButton
+            // 
+            _authButton.Location = new Point(854, 12);
+            _authButton.Name = "_authButton";
+            _authButton.Size = new Size(94, 29);
+            _authButton.TabIndex = 5;
+            _authButton.Text = "Login";
+            _authButton.UseVisualStyleBackColor = true;
+            _authButton.Click += AuthButton_Click;
+            // 
             // ChatForm
             // 
             AutoScaleDimensions = new SizeF(8F, 20F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(960, 540);
+            Controls.Add(_authButton);
             Controls.Add(_messageTextBox);
             Controls.Add(_usernameLabel);
             Controls.Add(_sendButton);
@@ -145,5 +152,6 @@
         private Button _sendButton;
         private TextBox _messageTextBox;
         private FlowLayoutPanel _chatPanel;
+        private Button _authButton;
     }
 }

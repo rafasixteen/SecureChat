@@ -10,35 +10,114 @@ namespace Client.Transport
 {
     public delegate void PacketHandler(byte[] data);
 
-    public sealed class ClientConnection : IDisposable
+    public sealed class ClientConnection : IAsyncDisposable
     {
-        private readonly TcpClient _client;
-        private readonly NetworkStream _stream;
+        private TcpClient? _client;
+        private NetworkStream? _stream;
+
         private readonly ProtocolSI _protocol = new();
-
         private readonly ConcurrentDictionary<ProtocolSICmdType, PacketHandler> _protocolHandlers = new();
-
         private readonly ConcurrentDictionary<string, PacketHandler> _applicationHandlers = new();
-
         private readonly SemaphoreSlim _sendLock = new(1, 1);
 
+        private Task _listenerTask = Task.CompletedTask;
         private CancellationTokenSource? _listenerCts;
 
         private byte[]? _aesKey;
         private byte[]? _aesIv;
 
-        private bool _isDisposed;
+        private readonly SemaphoreSlim _connectionLock = new(1, 1);
 
-        public ClientConnection(string serverIp, int serverPort)
+        public bool IsConnected { get; private set; }
+
+        #region Connect / Disconnect
+
+        /// <summary>
+        /// Opens a TCP connection. Safe to call only once; throws if already connected.
+        /// </summary>
+        public async Task ConnectAsync(string server, int port)
         {
-            _client = new TcpClient(serverIp, serverPort);
-            _stream = _client.GetStream();
+            await _connectionLock.WaitAsync().ConfigureAwait(false);
+
+            try
+            {
+                if (IsConnected)
+                    throw new InvalidOperationException("Already connected. Call DisconnectAsync first.");
+
+                // Create fresh instances — ensures no state from a previous connection leaks.
+                _client = new TcpClient();
+                await _client.ConnectAsync(server, port).ConfigureAwait(false);
+
+                _stream = _client.GetStream();
+                IsConnected = true;
+            }
+            catch
+            {
+                // If anything fails, release the partially-constructed resources immediately.
+                DisposeTransport();
+                throw;
+            }
+            finally
+            {
+                _connectionLock.Release();
+            }
         }
+
+        /// <summary>
+        /// Stops the listener, flushes any pending send, and closes the connection.
+        /// Safe to call even if not currently connected.
+        /// </summary>
+        public async Task DisconnectAsync()
+        {
+            await _connectionLock.WaitAsync().ConfigureAwait(false);
+
+            try
+            {
+                if (!IsConnected)
+                    return;
+
+                // Signal the listener loop to stop and wait for it to exit cleanly
+                // before we tear down the stream it is reading from.
+                _listenerCts?.Cancel();
+                await _listenerTask.ConfigureAwait(false);
+
+                DisposeTransport();
+                IsConnected = false;
+            }
+            finally
+            {
+                _connectionLock.Release();
+            }
+        }
+
+        /// <summary>
+        /// Releases stream + client without touching the connection lock.
+        /// Called both on clean disconnect and on failed connect.
+        /// </summary>
+        private void DisposeTransport()
+        {
+            _listenerCts?.Dispose();
+            _listenerCts = null;
+            _listenerTask = Task.CompletedTask;
+
+            _stream?.Dispose();
+            _stream = null;
+
+            _client?.Dispose();
+            _client = null;
+
+            _aesKey = null;
+            _aesIv = null;
+        }
+
+        #endregion
 
         #region Handshake
 
         public async Task PerformHandshakeAsync()
         {
+            EnsureConnected();
+
             string publicKey = await ReceiveServerPublicKeyAsync().ConfigureAwait(false);
 
             using RSA rsa = RSA.Create();
@@ -50,12 +129,12 @@ namespace Client.Transport
             byte[] encryptedKey = rsa.Encrypt(keyAndIv, RSAEncryptionPadding.Pkcs1);
             byte[] packet = _protocol.Make(ProtocolSICmdType.SECRET_KEY, encryptedKey);
 
-            await _stream.WriteAsync(packet).ConfigureAwait(false);
+            await _stream!.WriteAsync(packet).ConfigureAwait(false);
         }
 
         private async Task<string> ReceiveServerPublicKeyAsync()
         {
-            int bytesRead = await _stream.ReadAsync(_protocol.Buffer).ConfigureAwait(false);
+            int bytesRead = await _stream!.ReadAsync(_protocol.Buffer).ConfigureAwait(false);
 
             if (bytesRead == 0)
                 throw new IOException("Disconnected before receiving public key.");
@@ -74,6 +153,8 @@ namespace Client.Transport
 
         public async Task SendPacketAsync(ProtocolSICmdType commandType, byte[] payload)
         {
+            EnsureConnected();
+
             (byte[] aesKey, byte[] aesIv) = GetKeys();
 
             byte[] encrypted = AesUtils.Encrypt(payload, aesKey, aesIv);
@@ -83,7 +164,7 @@ namespace Client.Transport
 
             try
             {
-                await _stream.WriteAsync(packet).ConfigureAwait(false);
+                await _stream!.WriteAsync(packet).ConfigureAwait(false);
             }
             finally
             {
@@ -95,28 +176,23 @@ namespace Client.Transport
         {
             Envelope env = new(commandType, payload);
             byte[] data = Serializer.Serialize(env);
-
             await SendPacketAsync(ProtocolSICmdType.SYM_CIPHER_DATA, data).ConfigureAwait(false);
         }
 
         #endregion
 
-        #region Receive / Listener
+        #region Listener
 
         public void StartListening()
         {
+            EnsureConnected();
+            GetKeys();
+
             if (_listenerCts != null)
                 return;
 
             _listenerCts = new CancellationTokenSource();
-            _ = Task.Run(() => ListenLoopAsync(_listenerCts.Token));
-        }
-
-        public void StopListening()
-        {
-            _listenerCts?.Cancel();
-            _listenerCts?.Dispose();
-            _listenerCts = null;
+            _listenerTask = Task.Run(() => ListenLoopAsync(_listenerCts.Token));
         }
 
         private async Task ListenLoopAsync(CancellationToken token)
@@ -127,12 +203,10 @@ namespace Client.Transport
             {
                 while (!token.IsCancellationRequested)
                 {
-                    // Read header into the protocol buffer
-                    await _stream.ReadExactlyAsync(_protocol.Buffer.AsMemory(0, 3), token).ConfigureAwait(false);
+                    await _stream!.ReadExactlyAsync(_protocol.Buffer.AsMemory(0, 3), token).ConfigureAwait(false);
 
                     int dataLength = _protocol.GetDataLength();
 
-                    // Read payload directly into the protocol buffer after the header
                     if (dataLength > 0)
                         await _stream.ReadExactlyAsync(_protocol.Buffer.AsMemory(3, dataLength), token).ConfigureAwait(false);
 
@@ -156,6 +230,10 @@ namespace Client.Transport
                         protocolHandler.Invoke(decrypted);
                     }
                 }
+            }
+            catch (OperationCanceledException)
+            {
+                // Normal shutdown path — cancellation was requested.
             }
             catch (Exception ex)
             {
@@ -197,14 +275,24 @@ namespace Client.Transport
 
         #endregion
 
+        #region IAsyncDisposable
+
+        public async ValueTask DisposeAsync()
+        {
+            await DisconnectAsync().ConfigureAwait(false);
+
+            _sendLock.Dispose();
+            _connectionLock.Dispose();
+        }
+
+        #endregion
+
         #region Helpers
 
-        private static byte[] CombineKeyAndIv(byte[] key, byte[] iv)
+        private void EnsureConnected()
         {
-            byte[] result = new byte[key.Length + iv.Length];
-            Buffer.BlockCopy(key, 0, result, 0, key.Length);
-            Buffer.BlockCopy(iv, 0, result, key.Length, iv.Length);
-            return result;
+            if (!IsConnected || _stream == null)
+                throw new InvalidOperationException("Not connected. Call ConnectAsync first.");
         }
 
         private (byte[] aesKey, byte[] aesIv) GetKeys()
@@ -215,21 +303,12 @@ namespace Client.Transport
             return (_aesKey, _aesIv);
         }
 
-        #endregion
-
-        #region Dispose
-
-        public void Dispose()
+        private static byte[] CombineKeyAndIv(byte[] key, byte[] iv)
         {
-            if (_isDisposed) return;
-
-            StopListening();
-
-            _stream.Dispose();
-            _client.Dispose();
-            _sendLock.Dispose();
-
-            _isDisposed = true;
+            byte[] result = new byte[key.Length + iv.Length];
+            Buffer.BlockCopy(key, 0, result, 0, key.Length);
+            Buffer.BlockCopy(iv, 0, result, key.Length, iv.Length);
+            return result;
         }
 
         #endregion

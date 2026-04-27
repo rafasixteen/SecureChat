@@ -1,6 +1,5 @@
 ﻿using Client.Extensions;
 using Client.State;
-using Client.Transport;
 using Shared.DTOs;
 using System.Text;
 
@@ -9,6 +8,8 @@ namespace Client.Forms
     public partial class ChatForm : Form
     {
         private const int MaxMessageLength = 256;
+        private const string ServerHost = "127.0.0.1";
+        private const int ServerPort = 8080;
 
         public ChatForm()
         {
@@ -27,10 +28,8 @@ namespace Client.Forms
                 if (_friendsList.Items[e.Index] is Friend friend)
                 {
                     e.DrawBackground();
-
                     Brush brush = friend.NotificationCount > 0 ? Brushes.Green : Brushes.Black;
                     e.Graphics.DrawString(friend.ToString(), e.Font!, brush, e.Bounds);
-
                     e.DrawFocusRectangle();
                 }
             };
@@ -39,38 +38,26 @@ namespace Client.Forms
 
             AppState.Username.ValueChanged += OnUsernameChanged;
             AppState.LoggedIn += OnLoggedIn;
+            AppState.LoggedOut += OnLoggedOut;
 
-            try
+            if (await TryConnectAsync())
             {
-                AppState.Connection = new ClientConnection("127.0.0.1", 8080);
-                await AppState.Connection.PerformHandshakeAsync();
-
-                AppState.Connection.On("server-failed", OnServerFailed);
-                AppState.Connection.StartListening();
-
-                // Small delay to give time for the ChatForm to show before the LoginForm appears.
+                // Small delay to give the ChatForm time to show before the LoginForm appears.
                 await Task.Delay(500);
-
                 ShowAuthForm<LoginForm>();
-            }
-            catch (Exception)
-            {
-                MessageBox.Show("Failed to connect to the server.", "Connection Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
         private async void ChatForm_FormClosing(object sender, FormClosingEventArgs e)
         {
-            await AppState.Connection.SendEotPacketAsync();
-            AppState.Connection.Dispose();
+            await TeardownConnectionAsync();
         }
 
         private async void FriendsList_SelectedIndexChanged(object sender, EventArgs e)
         {
             if (_friendsList.SelectedItem is Friend friend)
             {
-                await AppState.Connection.RequestConversation(friend.Username);
-
+                await AppState.Connection!.RequestConversation(friend.Username);
                 ClearNotificationCount(friend.Username);
                 ClearMessages();
             }
@@ -101,11 +88,11 @@ namespace Client.Forms
                 return;
             }
 
-            // Local update of the chat panel to show the message immediately.
+            // Optimistic local update — show message immediately before server confirms.
             AddMessage(message, DateTime.UtcNow, AppState.Username.Value);
             _messageTextBox.Clear();
 
-            await AppState.Connection.SendMessage(friend.Username, message);
+            await AppState.Connection!.SendMessage(friend.Username, message);
         }
 
         private void MessageTextBox_KeyPress(object sender, KeyPressEventArgs e)
@@ -114,6 +101,84 @@ namespace Client.Forms
             {
                 SendButton_Click(sender, EventArgs.Empty);
                 e.Handled = true;
+            }
+        }
+
+        private async void AuthButton_Click(object sender, EventArgs e)
+        {
+            if (AppState.IsLoggedIn)
+            {
+                await TeardownConnectionAsync();
+
+                AppState.Username.Value = null;
+                AppState.LoggedOut?.Invoke();
+                AppState.FriendUsernames.Clear();
+
+                ClearMessages();
+
+                _friendsList.DataSource = null;
+                _usernameLabel.Text = "Not logged in";
+
+                // Reconnect for the next login session
+                if (await TryConnectAsync())
+                    ShowAuthForm<LoginForm>();
+            }
+            else
+            {
+                if (!AppState.Connection.IsConnected && !await TryConnectAsync())
+                {
+                    MessageBox.Show("There was an issue while trying to connect to the server.", "Connection Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                ShowAuthForm<LoginForm>();
+            }
+        }
+
+        #endregion
+
+        #region Connection Lifecycle
+
+        /// <summary> 
+        /// Attempts to connect to the server and perform the handshake.
+        /// </summary>
+        /// <returns>True if connection and handshake succeeded; false otherwise.</returns>
+        private static async Task<bool> TryConnectAsync()
+        {
+            try
+            {
+                await AppState.Connection.ConnectAsync(ServerHost, ServerPort);
+                await AppState.Connection.PerformHandshakeAsync();
+                AppState.Connection.StartListening();
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to connect to the server: {ex.Message}", "Connection Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Sends EOT, then disposes the connection. Safe to call when not connected.
+        /// </summary>
+        private static async Task TeardownConnectionAsync()
+        {
+            if (AppState.Connection == null)
+                return;
+
+            try
+            {
+                await AppState.Connection.SendEotPacketAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Client] EOT send error: {ex.Message}");
+            }
+            finally
+            {
+                await AppState.Connection.DisconnectAsync();
             }
         }
 
@@ -130,9 +195,7 @@ namespace Client.Forms
                 AppState.FriendUsernames.Clear();
 
                 foreach (string username in response.FriendUsernames)
-                {
                     AppState.FriendUsernames.Add(new Friend(username));
-                }
 
                 _friendsList.SelectedItem = null;
             });
@@ -152,13 +215,10 @@ namespace Client.Forms
             Invoke(() =>
             {
                 GetConversationResponse response = Serializer.Deserialize<GetConversationResponse>(data);
-
                 Console.WriteLine($"[Client] Received conversation with {response.Messages.Count} messages.");
 
                 foreach (MessageResponse message in response.Messages)
-                {
                     AddMessage(message.Content, message.SentAt, message.SenderUsername);
-                }
             });
         }
 
@@ -173,10 +233,7 @@ namespace Client.Forms
 
         private void OnSendMessageSuccess(byte[] data)
         {
-            Invoke(() =>
-            {
-                // DO nothing.
-            });
+            /* no-op */
         }
 
         private void OnSendMessageFailed(byte[] data)
@@ -186,8 +243,7 @@ namespace Client.Forms
                 string message = Encoding.UTF8.GetString(data);
                 MessageBox.Show(message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
 
-                // TODO: Remove the last sent message from the chat panel if it failed to send,
-                // or mark it as failed to send.
+                // TODO: Remove or mark failed message in the chat panel.
             });
         }
 
@@ -196,17 +252,12 @@ namespace Client.Forms
             Invoke(() =>
             {
                 MessageResponse response = Serializer.Deserialize<MessageResponse>(data);
-
                 Console.WriteLine($"[Client] Received message from {response.SenderUsername}: {response.Content}");
 
                 if (_friendsList.SelectedItem is Friend friend && response.SenderUsername == friend.Username)
-                {
                     AddMessage(response.Content, response.SentAt, response.SenderUsername);
-                }
                 else
-                {
                     IncrementNotificationCount(response.SenderUsername);
-                }
             });
         }
 
@@ -225,6 +276,10 @@ namespace Client.Forms
 
         private async void OnLoggedIn()
         {
+            _authButton.Text = "Logout";
+
+            AppState.Connection.On("server-failed", OnServerFailed);
+
             AppState.Connection.On("friends-list-success", OnFriendsListReceived);
             AppState.Connection.On("friends-list-failed", OnFriendsListRejected);
 
@@ -239,12 +294,20 @@ namespace Client.Forms
             await AppState.Connection.RequestFriendsList();
         }
 
+        public async void OnLoggedOut()
+        {
+            AppState.Connection.ClearHandlers();
+            _authButton.Text = "Login";
+        }
+
         private void OnUsernameChanged(string? username)
         {
-            _usernameLabel.Text = username ?? "Not logged in";
+            _usernameLabel.Text = username != null ? $"Logged in as: {username}" : "Not logged in";
         }
 
         #endregion
+
+        #region UI Helpers
 
         private void AddMessage(string text, DateTime sentAt, string senderUsername)
         {
@@ -291,11 +354,7 @@ namespace Client.Forms
             void PositionBubble()
             {
                 container.Width = _chatPanel.ClientSize.Width - 20;
-
-                if (!isReceived)
-                    bubble.Left = container.Width - bubble.Width - 5;
-                else
-                    bubble.Left = 5;
+                bubble.Left = isReceived ? 5 : container.Width - bubble.Width - 5;
             }
 
             container.Layout += (_, _) => PositionBubble();
@@ -344,5 +403,7 @@ namespace Client.Forms
                     ShowAuthForm<LoginForm>();
             }
         }
+
+        #endregion
     }
 }
