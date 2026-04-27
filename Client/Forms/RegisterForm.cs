@@ -45,6 +45,7 @@ namespace Client.Forms
                 return;
             }
 
+            _registerButton.Enabled = false;
             await AppState.Connection.SendRegistrationPacketAsync(username, password);
         }
 
@@ -72,6 +73,8 @@ namespace Client.Forms
         {
             Invoke(() =>
             {
+                _registerButton.Enabled = true;
+
                 string message = Encoding.UTF8.GetString(data);
                 MessageBox.Show(message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             });

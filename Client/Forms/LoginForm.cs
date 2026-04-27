@@ -31,6 +31,13 @@ namespace Client.Forms
             string username = _textBoxUsername.Text;
             string password = _textBoxPassword.Text;
 
+            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+            {
+                MessageBox.Show("Username and password cannot be empty.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            _loginButton.Enabled = false;
             await AppState.Connection.SendLoginPacketAsync(username, password);
         }
 
@@ -58,6 +65,8 @@ namespace Client.Forms
         {
             Invoke(() =>
             {
+                _loginButton.Enabled = true;
+
                 string message = Encoding.UTF8.GetString(data);
                 MessageBox.Show(message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             });
