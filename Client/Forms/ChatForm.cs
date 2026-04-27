@@ -126,10 +126,7 @@ namespace Client.Forms
             else
             {
                 if (!AppState.Connection.IsConnected && !await TryConnectAsync())
-                {
-                    MessageBox.Show("There was an issue while trying to connect to the server.", "Connection Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     return;
-                }
 
                 ShowAuthForm<LoginForm>();
             }
