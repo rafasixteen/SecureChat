@@ -19,20 +19,34 @@ namespace Server.PacketHandlers.Application
         {
             if (!_connectionManager.IsAuthenticated(client))
             {
-                Console.WriteLine("[GetConversation] Rejected request: client not authenticated.");
+                Logger.Log($"GetConversation rejected: client not authenticated.");
                 await Program.SendPacketAsync(client, "get-conversation-failed", "Client is not authenticated.");
                 return;
             }
 
             GetConversationRequest request = Serializer.Deserialize<GetConversationRequest>(payload);
+            
+            if (string.IsNullOrWhiteSpace(request.FriendUsername))
+            {
+                Logger.Log($"GetConversation failed: FriendUsername is empty.");
+                await Program.SendPacketAsync(client, "get-conversation-failed", "Friend username is required.");
+                return;
+            }
 
             AppDbContext db = new();
 
             string username = _connectionManager.GetUsername(client);
             string friendUsername = request.FriendUsername;
 
-            User sender = db.Users.First(u => u.Username == username);
-            User receiver = db.Users.First(u => u.Username == friendUsername);
+            User? sender = db.Users.FirstOrDefault(u => u.Username == username);
+            User? receiver = db.Users.FirstOrDefault(u => u.Username == friendUsername);
+
+            if (sender == null || receiver == null)
+            {
+                Logger.Log($"GetConversation failed: user(s) not found. Sender: {username}, Receiver: {friendUsername}");
+                await Program.SendPacketAsync(client, "get-conversation-failed", "User not found.");
+                return;
+            }
 
             List<Message>? messages = db.Messages.Include(m => m.Sender)
                 .Where(m =>
@@ -41,7 +55,7 @@ namespace Server.PacketHandlers.Application
                 .OrderBy(m => m.SentAt)
                 .ToList();
 
-            Console.WriteLine($"[GetConversation] Found {messages.Count} messages between users.");
+            Logger.Log($"GetConversation: Found {messages.Count} messages between {username} and {friendUsername}.");
 
             List<MessageResponse> messageResponses = messages.Select(m => new MessageResponse(
                 m.Content,

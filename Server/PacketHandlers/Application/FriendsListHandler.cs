@@ -13,6 +13,7 @@ namespace Server.PacketHandlers.Application
         {
             if (!_connectionManager.IsAuthenticated(client))
             {
+                Logger.Log($"FriendsList rejected: client not authenticated.");
                 await Program.SendPacketAsync(client, "friends-list-failed", "Unauthorized");
                 return;
             }
@@ -30,7 +31,7 @@ namespace Server.PacketHandlers.Application
             byte[] data = Serializer.Serialize(response);
 
             await Program.SendPacketAsync(client, "friends-list-success", data);
-            Console.WriteLine($"[Server] Sent friends list: '{string.Join(",", friends)}' to {username}");
+            Logger.Log($"Sent friends list to {username}: [{string.Join(",", friends)}]");
         }
     }
 }
