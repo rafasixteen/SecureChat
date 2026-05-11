@@ -2,6 +2,7 @@
 using Client.State;
 using Client.Transport;
 using Shared.DTOs;
+using System.ComponentModel;
 using System.Text;
 
 namespace Client.Forms
@@ -47,11 +48,10 @@ namespace Client.Forms
                 }
             };
 
-            _friendsList.DataSource = _appState.FriendUsernames;
-
             _appState.Username.ValueChanged += OnUsernameChanged;
             _appState.LoggedIn += OnLoggedIn;
             _appState.LoggedOut += OnLoggedOut;
+            _appState.FriendUsernames.ListChanged += OnFriendsListChanged;
 
             if (await ConnectAsync())
             {
@@ -63,6 +63,7 @@ namespace Client.Forms
 
         private async void ChatForm_FormClosing(object sender, FormClosingEventArgs e)
         {
+            _appState.Logout();
             await DisconnectAsync();
         }
 
@@ -122,12 +123,7 @@ namespace Client.Forms
             if (_appState.IsLoggedIn)
             {
                 await DisconnectAsync();
-
                 _appState.Logout();
-                ClearMessages();
-
-                _friendsList.DataSource = null;
-                _usernameLabel.Text = "Not logged in";
 
                 // Reconnect for the next login session
                 if (await ConnectAsync())
@@ -305,11 +301,20 @@ namespace Client.Forms
         {
             _connection.ClearHandlers();
             _authButton.Text = "Login";
+
+            ClearMessages();
         }
 
         private void OnUsernameChanged(string? username)
         {
             _usernameLabel.Text = username != null ? $"Logged in as: {username}" : "Not logged in";
+        }
+
+        private void OnFriendsListChanged(object? sender, ListChangedEventArgs e)
+        {
+            _friendsList.DataSource = null;
+            _friendsList.DataSource = _appState.FriendUsernames;
+            _friendsList.Refresh();
         }
 
         #endregion

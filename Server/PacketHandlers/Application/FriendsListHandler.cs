@@ -19,7 +19,7 @@ namespace Server.PacketHandlers.Application
         {
             if (!connections.IsAuthenticated(client))
             {
-                logger.Log($"FriendsList rejected: client not authenticated.");
+                logger.Log($"FriendsList rejected: client not authenticated.", true);
                 await sender.SendAsync(client, "friends-list-failed", "Unauthorized");
                 return;
             }
@@ -32,7 +32,7 @@ namespace Server.PacketHandlers.Application
                 .ToListAsync();
 
             await sender.SendAsync(client, "friends-list-success", new FriendsListResponse(friends));
-            logger.Log($"Sent friends list to {username}: [{string.Join(",", friends)}]");
+            logger.Log($"Sent friends list to {username}: [{string.Join(",", friends)}]", true);
         }
     }
 }
