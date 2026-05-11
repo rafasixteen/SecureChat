@@ -1,15 +1,20 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Server.Data;
 using Server.Data.Models;
+using Server.Transport;
 using Server.Transport.Connection;
 using Shared.DTOs;
 using System.Net.Sockets;
 
 namespace Server.PacketHandlers.Application
 {
-    public class GetConversationHandler(ConnectionManager connectionManager) : IPacketHandler
+    public class GetConversationHandler(
+        ConnectionManager connections,
+        AppDbContext db,
+        Logger logger,
+        IPacketSender sender) : IApplicationPacketHandler
     {
-        private readonly ConnectionManager _connectionManager = connectionManager;
+        public string CommandType => "get-conversation";
 
         // The hard limit is 1400 (due to ProtocolSI), but we use 512 to be
         // safe and leave room for encryption overhead and JSON serialization.
@@ -17,51 +22,49 @@ namespace Server.PacketHandlers.Application
 
         public async Task HandleAsync(TcpClient client, byte[] payload)
         {
-            if (!_connectionManager.IsAuthenticated(client))
+            if (!connections.IsAuthenticated(client))
             {
-                Logger.Log($"GetConversation rejected: client not authenticated.");
-                await Program.SendPacketAsync(client, "get-conversation-failed", "Client is not authenticated.");
+                logger.Log($"GetConversation rejected: client not authenticated.");
+                await sender.SendAsync(client, "get-conversation-failed", "Client is not authenticated.");
                 return;
             }
 
             GetConversationRequest request = Serializer.Deserialize<GetConversationRequest>(payload);
-            
+
             if (string.IsNullOrWhiteSpace(request.FriendUsername))
             {
-                Logger.Log($"GetConversation failed: FriendUsername is empty.");
-                await Program.SendPacketAsync(client, "get-conversation-failed", "Friend username is required.");
+                logger.Log($"GetConversation failed: FriendUsername is empty.");
+                await sender.SendAsync(client, "get-conversation-failed", "Friend username is required.");
                 return;
             }
 
-            AppDbContext db = new();
-
-            string username = _connectionManager.GetUsername(client);
+            string username = connections.GetUsername(client);
             string friendUsername = request.FriendUsername;
 
-            User? sender = db.Users.FirstOrDefault(u => u.Username == username);
-            User? receiver = db.Users.FirstOrDefault(u => u.Username == friendUsername);
+            User? senderUser = await db.Users.FirstOrDefaultAsync(u => u.Username == username);
+            User? receiverUser = await db.Users.FirstOrDefaultAsync(u => u.Username == friendUsername);
 
-            if (sender == null || receiver == null)
+            if (senderUser == null || receiverUser == null)
             {
-                Logger.Log($"GetConversation failed: user(s) not found. Sender: {username}, Receiver: {friendUsername}");
-                await Program.SendPacketAsync(client, "get-conversation-failed", "User not found.");
+                logger.Log($"GetConversation failed: user(s) not found. Sender: {username}, Receiver: {friendUsername}");
+                await sender.SendAsync(client, "get-conversation-failed", "User not found.");
                 return;
             }
 
-            List<Message>? messages = db.Messages.Include(m => m.Sender)
+            List<Message> messages = await db.Messages.Include(m => m.Sender)
                 .Where(m =>
-                     (m.SenderId == sender.Id && m.ReceiverId == receiver.Id) ||
-                     (m.SenderId == receiver.Id && m.ReceiverId == sender.Id))
+                     (m.SenderId == senderUser.Id && m.ReceiverId == receiverUser.Id) ||
+                     (m.SenderId == receiverUser.Id && m.ReceiverId == senderUser.Id))
                 .OrderBy(m => m.SentAt)
-                .ToList();
-
-            Logger.Log($"GetConversation: Found {messages.Count} messages between {username} and {friendUsername}.");
+                .ToListAsync();
 
             List<MessageResponse> messageResponses = messages.Select(m => new MessageResponse(
                 m.Content,
                 m.SentAt,
                 m.Sender.Username
             )).ToList();
+
+            logger.Log($"GetConversation: Found {messages.Count} messages between {username} and {friendUsername}.", true);
 
             List<MessageResponse> buffer = new();
             int currentSize = 0;
@@ -77,7 +80,7 @@ namespace Server.PacketHandlers.Application
                 // If adding this message exceeds limit, send packet first
                 if (currentSize + messageSize > MaxPacketSize && buffer.Count > 0)
                 {
-                    Console.WriteLine($"[GetConversation] Sending packet {packetIndex} with {buffer.Count} messages (~{currentSize} bytes)");
+                    logger.Log($"[GetConversation] Sending packet {packetIndex} with {buffer.Count} messages (~{currentSize} bytes)", true);
 
                     await SendChunk(client, buffer);
 
@@ -95,22 +98,18 @@ namespace Server.PacketHandlers.Application
             // Send remaining messages
             if (buffer.Count > 0)
             {
-                Console.WriteLine($"[GetConversation] Sending final packet {packetIndex} with {buffer.Count} messages (~{currentSize} bytes)");
+                logger.Log($"[GetConversation] Sending final packet {packetIndex} with {buffer.Count} messages (~{currentSize} bytes)", true);
 
                 await SendChunk(client, buffer);
                 totalSent += buffer.Count;
             }
 
-            Console.WriteLine($"[GetConversation] Done. Sent {totalSent}/{messageResponses.Count} messages in {packetIndex + 1} packets.");
+            logger.Log($"[GetConversation] Done. Sent {totalSent}/{messageResponses.Count} messages in {packetIndex + 1} packets.", true);
         }
 
-        private static async Task SendChunk(TcpClient client, List<MessageResponse> messages)
+        private async Task SendChunk(TcpClient client, List<MessageResponse> messages)
         {
-            GetConversationResponse packet = new(messages);
-            byte[] data = Serializer.Serialize(packet);
-
-            Console.WriteLine($"[GetConversation] Packet size: {data.Length} bytes");
-            await Program.SendPacketAsync(client, "get-conversation-chunk", data);
+            await sender.SendAsync(client, "get-conversation-chunk", new GetConversationResponse(messages));
         }
     }
 }

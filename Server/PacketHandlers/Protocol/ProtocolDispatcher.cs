@@ -1,18 +1,15 @@
 ﻿using EI.SI;
 using System.Net.Sockets;
 
-namespace Server.PacketHandlers
+namespace Server.PacketHandlers.Protocol
 {
     public class ProtocolDispatcher
     {
-        private readonly Dictionary<ProtocolSICmdType, IPacketHandler> _handlers = new();
+        private readonly Dictionary<ProtocolSICmdType, IPacketHandler> _handlers;
 
-        public ProtocolDispatcher With(ProtocolSICmdType commandType, IPacketHandler handler)
+        public ProtocolDispatcher(IEnumerable<IProtocolPacketHandler> handlers)
         {
-            if (!_handlers.TryAdd(commandType, handler))
-                throw new InvalidOperationException($"Protocol handler for command type '{commandType}' is already registered.");
-
-            return this;
+            _handlers = handlers.ToDictionary(h => h.CommandType, h => (IPacketHandler)h);
         }
 
         public async Task DispatchAsync(TcpClient client, ProtocolSICmdType commandType, byte[] data)

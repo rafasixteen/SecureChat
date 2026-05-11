@@ -1,56 +1,60 @@
-﻿using Server.Data;
+﻿using Microsoft.EntityFrameworkCore;
+using Server.Data;
 using Server.Data.Models;
+using Server.Transport;
 using Server.Transport.Connection;
 using Shared.DTOs;
 using System.Net.Sockets;
 
 namespace Server.PacketHandlers.Application
 {
-    public class MessageHandler(ConnectionManager connectionManager) : IPacketHandler
+    public class MessageHandler(
+        AppDbContext db,
+        ConnectionManager connections,
+        Logger logger,
+        IPacketSender sender) : IApplicationPacketHandler
     {
-        private readonly ConnectionManager _connectionManager = connectionManager;
+        public string CommandType => "send-message";
 
         private const int MaxMessageLength = 256;
 
         public async Task HandleAsync(TcpClient client, byte[] payload)
         {
-            if (!_connectionManager.IsAuthenticated(client))
+            if (!connections.IsAuthenticated(client))
             {
-                Logger.Log($"Send message failed: client not authenticated.");
-                await Program.SendPacketAsync(client, "send-message-failed", "Client is not authenticated.");
+                logger.Log($"Send message failed: client not authenticated.");
+                await sender.SendAsync(client, "send-message-failed", "Client is not authenticated.");
                 return;
             }
 
             SendMessageRequest request = Serializer.Deserialize<SendMessageRequest>(payload);
-            string username = _connectionManager.GetUsername(client);
+            string username = connections.GetUsername(client);
 
-            AppDbContext db = new();
-
-            User sender = db.Users.First(u => u.Username == username);
-            User receiver = db.Users.First(u => u.Username == request.FriendUsername);
+            User senderUser = await db.Users.FirstAsync(u => u.Username == username);
+            User receiverUser = await db.Users.FirstAsync(u => u.Username == request.FriendUsername);
 
             db.Messages.Add(new Message
             {
-                SenderId = sender.Id,
-                ReceiverId = receiver.Id,
+                SenderId = senderUser.Id,
+                ReceiverId = receiverUser.Id,
                 Content = request.Message.Length > MaxMessageLength ? request.Message.Substring(0, MaxMessageLength) : request.Message,
                 SentAt = DateTime.UtcNow
             });
 
             await db.SaveChangesAsync();
 
-            Logger.Log($"Message sent from {sender.Username} to {receiver.Username}");
+            logger.Log($"Message sent from {senderUser.Username} to {receiverUser.Username}");
 
-            await Program.SendPacketAsync(client, "send-message-success", "Message sent successfully.");
+            await sender.SendAsync(client, "send-message-success", "Message sent successfully.");
 
-            TcpClient? receiverClient = _connectionManager.GetClientByUsername(request.FriendUsername);
+            TcpClient? receiverClient = connections.GetClientByUsername(request.FriendUsername);
 
             // If client is online, send them a notification about the new message.
             if (receiverClient != null)
             {
-                MessageResponse message = new(request.Message, DateTime.UtcNow, sender.Username);
-                await Program.SendPacketAsync(receiverClient, "message-received", Serializer.Serialize(message));
-                Logger.Log($"Message delivered to online user: {receiver.Username}");
+                MessageResponse message = new(request.Message, DateTime.UtcNow, senderUser.Username);
+                await sender.SendAsync(receiverClient, "message-received", message);
+                logger.Log($"Message delivered to online user: {receiverUser.Username}");
             }
         }
     }

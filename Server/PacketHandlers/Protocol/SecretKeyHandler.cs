@@ -1,23 +1,20 @@
-﻿using Server.Transport.Connection;
+﻿using EI.SI;
+using Server.Transport.Connection;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 
 namespace Server.PacketHandlers.Protocol
 {
-    public class SecretKeyHandler(ConnectionManager connectionManager, RSA rsa) : IPacketHandler
+    public class SecretKeyHandler(ConnectionManager connections, RSA rsa) : IProtocolPacketHandler
     {
-        private readonly ConnectionManager _connectionManager = connectionManager;
-
-        private readonly RSA _rsa = rsa;
+        public ProtocolSICmdType CommandType => ProtocolSICmdType.SECRET_KEY;
 
         public Task HandleAsync(TcpClient client, byte[] payload)
         {
-            byte[] decrypted = _rsa.Decrypt(payload, RSAEncryptionPadding.Pkcs1);
+            byte[] decrypted = rsa.Decrypt(payload, RSAEncryptionPadding.Pkcs1);
             (byte[] key, byte[] iv) = SplitKeyAndIv(decrypted);
 
-            _connectionManager.SetAesKeys(client, key, iv);
-            Console.WriteLine("[Server] AES key established");
-
+            connections.SetAesKeys(client, key, iv);
             return Task.CompletedTask;
         }
 

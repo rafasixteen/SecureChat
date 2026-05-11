@@ -1,23 +1,23 @@
-﻿using Server.Transport.Connection;
+﻿using EI.SI;
+using Server.PacketHandlers.Application;
+using Server.Transport.Connection;
 using Shared;
 using Shared.DTOs;
 using System.Net.Sockets;
 
 namespace Server.PacketHandlers.Protocol
 {
-    public class SymmetricDataHandler(ConnectionManager connectionManager, ApplicationDispatcher dispatcher) : IPacketHandler
+    public class SymmetricDataHandler(ConnectionManager connections, ApplicationDispatcher dispatcher) : IProtocolPacketHandler
     {
-        private readonly ConnectionManager _connectionManager = connectionManager;
-
-        private readonly ApplicationDispatcher _dispatcher = dispatcher;
+        public ProtocolSICmdType CommandType => ProtocolSICmdType.SYM_CIPHER_DATA;
 
         public async Task HandleAsync(TcpClient client, byte[] data)
         {
-            (byte[] key, byte[] iv) = _connectionManager.GetAesKeys(client);
+            (byte[] key, byte[] iv) = connections.GetAesKeys(client);
             byte[] decrypted = AesUtils.Decrypt(data, key, iv);
 
             Envelope env = Serializer.Deserialize<Envelope>(decrypted);
-            await _dispatcher.DispatchAsync(client, env.CommandType, env.Payload);
+            await dispatcher.DispatchAsync(client, env.CommandType, env.Payload);
         }
     }
 }

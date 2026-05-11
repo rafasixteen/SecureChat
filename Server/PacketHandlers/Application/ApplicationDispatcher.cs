@@ -1,17 +1,14 @@
 ﻿using System.Net.Sockets;
 
-namespace Server.PacketHandlers
+namespace Server.PacketHandlers.Application
 {
     public class ApplicationDispatcher
     {
-        private readonly Dictionary<string, IPacketHandler> _handlers = new();
+        private readonly Dictionary<string, IPacketHandler> _handlers;
 
-        public ApplicationDispatcher With(string commandType, IPacketHandler handler)
+        public ApplicationDispatcher(IEnumerable<IApplicationPacketHandler> handlers)
         {
-            if (!_handlers.TryAdd(commandType, handler))
-                throw new InvalidOperationException($"Application handler for command type '{commandType}' is already registered.");
-
-            return this;
+            _handlers = handlers.ToDictionary(h => h.CommandType, h => (IPacketHandler)h);
         }
 
         public async Task DispatchAsync(TcpClient client, string commandType, byte[] data)

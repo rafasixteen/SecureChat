@@ -3,7 +3,7 @@ using System.Net.Sockets;
 
 namespace Server.Transport.Connection
 {
-    public class ConnectionManager
+    public class ConnectionManager(Logger logger)
     {
         private ConcurrentDictionary<TcpClient, Connection> ConnectedClients { get; } = new();
 
@@ -14,12 +14,12 @@ namespace Server.Transport.Connection
             if (!ConnectedClients.TryAdd(client, connection))
                 throw new Exception("Failed to add client to connection manager.");
 
-            Console.WriteLine($"[Server] Client connected: {client.Client.RemoteEndPoint}");
+            logger.Log($"Client connected: {client.Client.RemoteEndPoint}", true);
         }
 
         public void Disconnect(TcpClient client)
         {
-            Console.WriteLine($"[Server] Client disconnected: {client.Client.RemoteEndPoint}");
+            logger.Log($"Client disconnected: {client.Client.RemoteEndPoint}", true);
 
             ConnectedClients.TryRemove(client, out _);
             client.Close();

@@ -1,6 +1,7 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using Server.Data;
 using Server.Data.Models;
+using Server.Transport;
 using Server.Transport.Connection;
 using Server.Transport.Security;
 using Shared.DTOs;
@@ -8,9 +9,15 @@ using System.Net.Sockets;
 
 namespace Server.PacketHandlers.Application
 {
-    public class LoginHandler(ConnectionManager connectionManager) : IPacketHandler
+    public class LoginHandler(
+        AppDbContext db,
+        ConnectionManager connections,
+        Logger logger,
+        IPacketSender sender) : IApplicationPacketHandler
     {
-        private readonly ConnectionManager _connectionManager = connectionManager;
+        public string CommandType => "login";
+
+        private readonly ConnectionManager _connectionManager = connections;
 
         public async Task HandleAsync(TcpClient client, byte[] payload)
         {
@@ -18,37 +25,31 @@ namespace Server.PacketHandlers.Application
 
             if (!await ValidateInput(client, request))
             {
-                Logger.Log($"Login failed (input validation) for user: {request.Username}");
+                logger.Log($"Login failed (input validation) for user: {request.Username}");
                 return;
             }
-
-            using AppDbContext db = new();
 
             User? user = await db.Users.FirstOrDefaultAsync(u => u.Username == request.Username);
             bool valid = user != null && Password.Verify(request.Password, user.PasswordHash, user.Salt);
 
             if (!valid)
             {
-                Logger.Log($"Login failed (invalid credentials) for user: {request.Username}");
-                await Program.SendPacketAsync(client, "login-failed", "Invalid username or password.");
+                logger.Log($"Login failed (invalid credentials) for user: {request.Username}");
+                await sender.SendAsync(client, "login-failed", "Invalid username or password.");
                 return;
             }
 
             _connectionManager.SetUsername(client, request.Username);
 
-            LoginResponse response = new(request.Username);
-            byte[] responseData = Serializer.Serialize(response);
-
-            await Program.SendPacketAsync(client, "login-success", responseData);
-            Logger.Log($"User logged in: {request.Username}");
-
+            await sender.SendAsync(client, "login-success", new LoginResponse(request.Username));
+            logger.Log($"User logged in: {request.Username}");
         }
 
-        private static async Task<bool> ValidateInput(TcpClient client, LoginRequest request)
+        private async Task<bool> ValidateInput(TcpClient client, LoginRequest request)
         {
             if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
             {
-                await Program.SendPacketAsync(client, "login-failed", "Username and password are required.");
+                await sender.SendAsync(client, "login-failed", "Username and password are required.");
                 return false;
             }
 

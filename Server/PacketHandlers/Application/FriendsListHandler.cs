@@ -1,37 +1,38 @@
-﻿using Server.Data;
+﻿using Microsoft.EntityFrameworkCore;
+using Server.Data;
+using Server.Transport;
 using Server.Transport.Connection;
 using Shared.DTOs;
 using System.Net.Sockets;
 
 namespace Server.PacketHandlers.Application
 {
-    public class FriendsListHandler(ConnectionManager connectionManager) : IPacketHandler
+    public class FriendsListHandler(
+        AppDbContext db,
+        ConnectionManager connections,
+        Logger logger,
+        IPacketSender sender) : IApplicationPacketHandler
     {
-        private readonly ConnectionManager _connectionManager = connectionManager;
+        public string CommandType => "get-friends";
 
         public async Task HandleAsync(TcpClient client, byte[] payload)
         {
-            if (!_connectionManager.IsAuthenticated(client))
+            if (!connections.IsAuthenticated(client))
             {
-                Logger.Log($"FriendsList rejected: client not authenticated.");
-                await Program.SendPacketAsync(client, "friends-list-failed", "Unauthorized");
+                logger.Log($"FriendsList rejected: client not authenticated.");
+                await sender.SendAsync(client, "friends-list-failed", "Unauthorized");
                 return;
             }
 
-            string username = _connectionManager.GetUsername(client);
+            string username = connections.GetUsername(client);
 
-            using AppDbContext db = new();
-
-            List<string> friends = db.Users
+            List<string> friends = await db.Users
                 .Where(user => user.Username != username)
                 .Select(f => f.Username)
-                .ToList();
+                .ToListAsync();
 
-            FriendsListResponse response = new(friends);
-            byte[] data = Serializer.Serialize(response);
-
-            await Program.SendPacketAsync(client, "friends-list-success", data);
-            Logger.Log($"Sent friends list to {username}: [{string.Join(",", friends)}]");
+            await sender.SendAsync(client, "friends-list-success", new FriendsListResponse(friends));
+            logger.Log($"Sent friends list to {username}: [{string.Join(",", friends)}]");
         }
     }
 }
