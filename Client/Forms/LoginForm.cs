@@ -1,29 +1,40 @@
 ﻿using Client.Extensions;
 using Client.State;
+using Client.Transport;
 using Shared.DTOs;
 using System.Text;
 
 namespace Client.Forms
 {
-    public partial class LoginForm : AuthForm
+    public partial class LoginForm : Form
     {
-        public LoginForm()
+        private readonly AppState _state;
+
+        private readonly ClientConnection _connection;
+
+        private readonly IServiceProvider _provider;
+
+        public LoginForm(AppState state, ClientConnection connection, IServiceProvider provider)
         {
             InitializeComponent();
+
+            _state = state;
+            _connection = connection;
+            _provider = provider;
         }
 
         #region Control Event Handlers
 
         private void LoginForm_Load(object sender, EventArgs e)
         {
-            AppState.Connection.On("login-success", OnLoginSuccess);
-            AppState.Connection.On("login-failed", OnLoginFailed);
+            _connection.On("login-success", OnLoginSuccess);
+            _connection.On("login-failed", OnLoginFailed);
         }
 
         private void LoginForm_FormClosing(object sender, FormClosingEventArgs e)
         {
-            AppState.Connection.RemoveHandler("login-success");
-            AppState.Connection.RemoveHandler("login-failed");
+            _connection.RemoveHandler("login-success");
+            _connection.RemoveHandler("login-failed");
         }
 
         private async void LoginButton_Click(object sender, EventArgs e)
@@ -38,12 +49,12 @@ namespace Client.Forms
             }
 
             _loginButton.Enabled = false;
-            await AppState.Connection.SendLoginPacketAsync(username, password);
+            await _connection.SendLoginPacketAsync(username, password);
         }
 
         private void CreateAccountLinkLabel_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
         {
-            SwitchToOther();
+            Program.NavigateTo<RegisterForm>(_provider);
         }
 
         #endregion
@@ -55,8 +66,7 @@ namespace Client.Forms
             Invoke(() =>
             {
                 LoginResponse response = Serializer.Deserialize<LoginResponse>(data);
-                AppState.Username.Value = response.Username;
-                AppState.LoggedIn?.Invoke();
+                _state.Login(response.Username);
                 Close();
             });
         }

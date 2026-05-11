@@ -1,5 +1,6 @@
 ﻿using Client.Extensions;
 using Client.State;
+using Client.Transport;
 using Shared.DTOs;
 using System.Text;
 
@@ -8,12 +9,24 @@ namespace Client.Forms
     public partial class ChatForm : Form
     {
         private const int MaxMessageLength = 256;
+
         private const string ServerHost = "127.0.0.1";
+
         private const int ServerPort = 8080;
 
-        public ChatForm()
+        private readonly AppState _appState;
+
+        private readonly ClientConnection _connection;
+
+        private readonly IServiceProvider _provider;
+
+        public ChatForm(AppState appState, ClientConnection connection, IServiceProvider provider)
         {
             InitializeComponent();
+
+            _appState = appState;
+            _connection = connection;
+            _provider = provider;
         }
 
         #region Control Event Handlers
@@ -34,30 +47,30 @@ namespace Client.Forms
                 }
             };
 
-            _friendsList.DataSource = AppState.FriendUsernames;
+            _friendsList.DataSource = _appState.FriendUsernames;
 
-            AppState.Username.ValueChanged += OnUsernameChanged;
-            AppState.LoggedIn += OnLoggedIn;
-            AppState.LoggedOut += OnLoggedOut;
+            _appState.Username.ValueChanged += OnUsernameChanged;
+            _appState.LoggedIn += OnLoggedIn;
+            _appState.LoggedOut += OnLoggedOut;
 
-            if (await TryConnectAsync())
+            if (await ConnectAsync())
             {
                 // Small delay to give the ChatForm time to show before the LoginForm appears.
                 await Task.Delay(500);
-                ShowAuthForm<LoginForm>();
+                Program.NavigateTo<LoginForm>(_provider, true);
             }
         }
 
         private async void ChatForm_FormClosing(object sender, FormClosingEventArgs e)
         {
-            await TeardownConnectionAsync();
+            await DisconnectAsync();
         }
 
         private async void FriendsList_SelectedIndexChanged(object sender, EventArgs e)
         {
             if (_friendsList.SelectedItem is Friend friend)
             {
-                await AppState.Connection!.RequestConversation(friend.Username);
+                await _connection.RequestConversation(friend.Username);
                 ClearNotificationCount(friend.Username);
                 ClearMessages();
             }
@@ -82,17 +95,17 @@ namespace Client.Forms
                 return;
             }
 
-            if (AppState.Username.Value == null)
+            if (_appState.Username.Value == null)
             {
                 MessageBox.Show("You must be logged in to send messages.", "Not Logged In", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
             // Optimistic local update — show message immediately before server confirms.
-            AddMessage(message, DateTime.UtcNow, AppState.Username.Value);
+            AddMessage(message, DateTime.UtcNow, _appState.Username.Value);
             _messageTextBox.Clear();
 
-            await AppState.Connection!.SendMessage(friend.Username, message);
+            await _connection.SendMessage(friend.Username, message);
         }
 
         private void MessageTextBox_KeyPress(object sender, KeyPressEventArgs e)
@@ -106,29 +119,26 @@ namespace Client.Forms
 
         private async void AuthButton_Click(object sender, EventArgs e)
         {
-            if (AppState.IsLoggedIn)
+            if (_appState.IsLoggedIn)
             {
-                await TeardownConnectionAsync();
+                await DisconnectAsync();
 
-                AppState.Username.Value = null;
-                AppState.LoggedOut?.Invoke();
-                AppState.FriendUsernames.Clear();
-
+                _appState.Logout();
                 ClearMessages();
 
                 _friendsList.DataSource = null;
                 _usernameLabel.Text = "Not logged in";
 
                 // Reconnect for the next login session
-                if (await TryConnectAsync())
-                    ShowAuthForm<LoginForm>();
+                if (await ConnectAsync())
+                    Program.NavigateTo<LoginForm>(_provider, true);
             }
             else
             {
-                if (!AppState.Connection.IsConnected && !await TryConnectAsync())
+                if (!_connection.IsConnected && !await ConnectAsync())
                     return;
 
-                ShowAuthForm<LoginForm>();
+                Program.NavigateTo<LoginForm>(_provider, true);
             }
         }
 
@@ -140,13 +150,13 @@ namespace Client.Forms
         /// Attempts to connect to the server and perform the handshake.
         /// </summary>
         /// <returns>True if connection and handshake succeeded; false otherwise.</returns>
-        private static async Task<bool> TryConnectAsync()
+        private async Task<bool> ConnectAsync()
         {
             try
             {
-                await AppState.Connection.ConnectAsync(ServerHost, ServerPort);
-                await AppState.Connection.PerformHandshakeAsync();
-                AppState.Connection.StartListening();
+                await _connection.ConnectAsync(ServerHost, ServerPort);
+                await _connection.PerformHandshakeAsync();
+                _connection.StartListening();
 
                 return true;
             }
@@ -160,14 +170,14 @@ namespace Client.Forms
         /// <summary>
         /// Sends EOT, then disposes the connection. Safe to call when not connected.
         /// </summary>
-        private static async Task TeardownConnectionAsync()
+        private async Task DisconnectAsync()
         {
-            if (AppState.Connection == null)
+            if (_connection == null)
                 return;
 
             try
             {
-                await AppState.Connection.SendEotPacketAsync();
+                await _connection.SendEotPacketAsync();
             }
             catch (Exception ex)
             {
@@ -175,7 +185,7 @@ namespace Client.Forms
             }
             finally
             {
-                await AppState.Connection.DisconnectAsync();
+                await _connection.DisconnectAsync();
             }
         }
 
@@ -189,10 +199,10 @@ namespace Client.Forms
             {
                 FriendsListResponse response = Serializer.Deserialize<FriendsListResponse>(data);
 
-                AppState.FriendUsernames.Clear();
+                _appState.FriendUsernames.Clear();
 
                 foreach (string username in response.FriendUsernames)
-                    AppState.FriendUsernames.Add(new Friend(username));
+                    _appState.FriendUsernames.Add(new Friend(username));
 
                 _friendsList.SelectedItem = null;
             });
@@ -275,25 +285,25 @@ namespace Client.Forms
         {
             _authButton.Text = "Logout";
 
-            AppState.Connection.On("server-failed", OnServerFailed);
+            _connection.On("server-failed", OnServerFailed);
 
-            AppState.Connection.On("friends-list-success", OnFriendsListReceived);
-            AppState.Connection.On("friends-list-failed", OnFriendsListRejected);
+            _connection.On("friends-list-success", OnFriendsListReceived);
+            _connection.On("friends-list-failed", OnFriendsListRejected);
 
-            AppState.Connection.On("get-conversation-chunk", OnGetConversationChunk);
-            AppState.Connection.On("get-conversation-failed", OnGetConversationFailed);
+            _connection.On("get-conversation-chunk", OnGetConversationChunk);
+            _connection.On("get-conversation-failed", OnGetConversationFailed);
 
-            AppState.Connection.On("send-message-success", OnSendMessageSuccess);
-            AppState.Connection.On("send-message-failed", OnSendMessageFailed);
+            _connection.On("send-message-success", OnSendMessageSuccess);
+            _connection.On("send-message-failed", OnSendMessageFailed);
 
-            AppState.Connection.On("message-received", OnMessageReceived);
+            _connection.On("message-received", OnMessageReceived);
 
-            await AppState.Connection.RequestFriendsList();
+            await _connection.RequestFriendsList();
         }
 
         public async void OnLoggedOut()
         {
-            AppState.Connection.ClearHandlers();
+            _connection.ClearHandlers();
             _authButton.Text = "Login";
         }
 
@@ -308,7 +318,7 @@ namespace Client.Forms
 
         private void AddMessage(string text, DateTime sentAt, string senderUsername)
         {
-            bool isReceived = senderUsername != AppState.Username.Value;
+            bool isReceived = senderUsername != _appState.Username.Value;
 
             FlowLayoutPanel bubble = new()
             {
@@ -367,7 +377,7 @@ namespace Client.Forms
 
         private void IncrementNotificationCount(string friendUsername)
         {
-            Friend? friend = AppState.FriendUsernames.FirstOrDefault(f => f.Username == friendUsername);
+            Friend? friend = _appState.FriendUsernames.FirstOrDefault(f => f.Username == friendUsername);
 
             if (friend != null)
             {
@@ -378,26 +388,12 @@ namespace Client.Forms
 
         private void ClearNotificationCount(string friendUsername)
         {
-            Friend? friend = AppState.FriendUsernames.FirstOrDefault(f => f.Username == friendUsername);
+            Friend? friend = _appState.FriendUsernames.FirstOrDefault(f => f.Username == friendUsername);
 
             if (friend != null)
             {
                 friend.NotificationCount = 0;
                 _friendsList.Refresh();
-            }
-        }
-
-        private void ShowAuthForm<T>() where T : AuthForm, new()
-        {
-            using AuthForm form = new T();
-            DialogResult result = form.ShowDialog();
-
-            if (result == DialogResult.Retry)
-            {
-                if (form is LoginForm)
-                    ShowAuthForm<RegisterForm>();
-                else
-                    ShowAuthForm<LoginForm>();
             }
         }
 

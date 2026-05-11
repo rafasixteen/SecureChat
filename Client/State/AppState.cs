@@ -1,21 +1,31 @@
-using Client.Transport;
 using Shared;
 using System.ComponentModel;
 
 namespace Client.State
 {
-    public static class AppState
+    public class AppState
     {
-        public static ClientConnection Connection { get; } = new();
+        public ObservableValue<string?> Username { get; } = new(null);
 
-        public static ObservableValue<string?> Username { get; } = new(null);
+        public BindingList<Friend> FriendUsernames { get; } = new();
 
-        public static BindingList<Friend> FriendUsernames { get; } = new();
+        public event Action? LoggedIn;
 
-        public static Action? LoggedIn;
+        public event Action? LoggedOut;
 
-        public static Action? LoggedOut;
+        public bool IsLoggedIn => Username.Value != null;
 
-        public static bool IsLoggedIn => Username.Value != null;
+        public void Login(string username)
+        {
+            Username.Value = username;
+            LoggedIn?.Invoke();
+        }
+
+        public void Logout()
+        {
+            Username.Value = null;
+            FriendUsernames.Clear();
+            LoggedOut?.Invoke();
+        }
     }
 }

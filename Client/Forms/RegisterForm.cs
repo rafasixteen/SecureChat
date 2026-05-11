@@ -1,30 +1,41 @@
 ﻿using Client.Extensions;
 using Client.State;
+using Client.Transport;
 using Shared.DTOs;
 using Shared.DTOs.Shared.DTOs;
 using System.Text;
 
 namespace Client.Forms
 {
-    public partial class RegisterForm : AuthForm
+    public partial class RegisterForm : Form
     {
-        public RegisterForm()
+        private readonly AppState _state;
+
+        private readonly ClientConnection _connection;
+
+        private readonly IServiceProvider _provider;
+
+        public RegisterForm(AppState state, ClientConnection connection, IServiceProvider provider)
         {
             InitializeComponent();
+
+            _state = state;
+            _connection = connection;
+            _provider = provider;
         }
 
         #region Control Event Handlers
 
         private void RegisterForm_Load(object sender, EventArgs e)
         {
-            AppState.Connection.On("register-success", OnRegisterSuccess);
-            AppState.Connection.On("register-failed", OnRegistrationFailed);
+            _connection.On("register-success", OnRegisterSuccess);
+            _connection.On("register-failed", OnRegistrationFailed);
         }
 
         private void RegisterForm_FormClosing(object sender, FormClosingEventArgs e)
         {
-            AppState.Connection.RemoveHandler("register-success");
-            AppState.Connection.RemoveHandler("register-failed");
+            _connection.RemoveHandler("register-success");
+            _connection.RemoveHandler("register-failed");
         }
 
         private async void ButtonRegister_Click(object sender, EventArgs e)
@@ -46,12 +57,12 @@ namespace Client.Forms
             }
 
             _registerButton.Enabled = false;
-            await AppState.Connection.SendRegistrationPacketAsync(username, password);
+            await _connection.SendRegistrationPacketAsync(username, password);
         }
 
         private void HaveAccountLinkLabel_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
         {
-            SwitchToOther();
+            Program.NavigateTo<LoginForm>(_provider);
         }
 
         #endregion
@@ -63,8 +74,7 @@ namespace Client.Forms
             Invoke(() =>
             {
                 RegisterResponse response = Serializer.Deserialize<RegisterResponse>(data);
-                AppState.Username.Value = response.Username;
-                AppState.LoggedIn?.Invoke();
+                _state.Login(response.Username);
                 Close();
             });
         }
