@@ -3,8 +3,10 @@ using Server.Data;
 using Server.Data.Models;
 using Server.Transport;
 using Server.Transport.Connection;
+using Shared;
 using Shared.DTOs;
 using System.Net.Sockets;
+using System.Text;
 
 namespace Server.PacketHandlers.Application
 {
@@ -12,6 +14,7 @@ namespace Server.PacketHandlers.Application
         AppDbContext db,
         ConnectionManager connections,
         Logger logger,
+        DbEncryptionSettings dbKeys,
         IPacketSender sender) : IApplicationPacketHandler
     {
         public string CommandType => "send-message";
@@ -33,11 +36,16 @@ namespace Server.PacketHandlers.Application
             User senderUser = await db.Users.FirstAsync(u => u.Username == username);
             User receiverUser = await db.Users.FirstAsync(u => u.Username == request.FriendUsername);
 
+            byte[] textBytes = Encoding.UTF8.GetBytes(request.Message.Length > MaxMessageLength ? request.Message.Substring(0, MaxMessageLength) : request.Message);
+            byte[] encryptedBytes = AesUtils.Encrypt(textBytes, dbKeys.Key, dbKeys.Iv);
+
+            var messageContents = Convert.ToBase64String(encryptedBytes);
+
             db.Messages.Add(new Message
             {
                 SenderId = senderUser.Id,
                 ReceiverId = receiverUser.Id,
-                Content = request.Message.Length > MaxMessageLength ? request.Message.Substring(0, MaxMessageLength) : request.Message,
+                Content = messageContents,
                 SentAt = DateTime.UtcNow
             });
 

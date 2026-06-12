@@ -13,7 +13,6 @@ namespace Server.Transport
         ConnectionManager connections,
         ProtocolDispatcher protocolDispatcher,
         IPacketSender sender,
-        RSA rsa,
         Logger logger)
     {
         private const int PORT = 8080;

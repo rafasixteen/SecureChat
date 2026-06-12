@@ -115,6 +115,7 @@ namespace Client.Transport
         #region Handshake
 
         public RSA? ClientRsa { get; private set; }
+        public byte[]? ServerPublicKeyBytes { get; private set; }
 
         public async Task PerformHandshakeAsync()
         {
@@ -129,6 +130,9 @@ namespace Client.Transport
             // Enviar chave pública para o servidor
             byte[] publicPacket = _protocol.Make(ProtocolSICmdType.PUBLIC_KEY, publicBytes);
             await _stream!.WriteAsync(publicPacket).ConfigureAwait(false);
+
+            string serverPublicKeyString = await ReceiveServerPublicKeyAsync().ConfigureAwait(false);
+            ServerPublicKeyBytes = Convert.FromBase64String(serverPublicKeyString);
 
             await _stream!.ReadExactlyAsync(_protocol.Buffer.AsMemory(0, 3)).ConfigureAwait(false);
 
@@ -201,7 +205,10 @@ namespace Client.Transport
 
         public async Task SendPacketAsync(string commandType, byte[] payload)
         {
-            Envelope env = new(commandType, payload);
+            byte[] signature = ClientRsa!.SignData(payload, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+
+            Envelope env = new(commandType, payload, signature);
+
             byte[] data = Serializer.Serialize(env);
             await SendPacketAsync(ProtocolSICmdType.SYM_CIPHER_DATA, data).ConfigureAwait(false);
         }
@@ -243,6 +250,21 @@ namespace Client.Transport
                     if (commandType == ProtocolSICmdType.SYM_CIPHER_DATA)
                     {
                         Envelope env = Serializer.Deserialize<Envelope>(decrypted);
+
+                        if (env.Signature == null || ServerPublicKeyBytes == null)
+                        {
+                            throw new Exception("Message Rejected: Missing signature or public key.");
+                        }
+
+                        using RSA serverRSA = RSA.Create();
+                        serverRSA.ImportRSAPublicKey(ServerPublicKeyBytes, out _);
+
+                        bool isAuthentic = serverRSA.VerifyData(env.Payload, env.Signature, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+
+                        if (!isAuthentic)
+                        {
+                            throw new Exception("Message Rejected: Signature verification failed.");
+                        }
 
                         if (!_applicationHandlers.TryGetValue(env.CommandType, out PacketHandler? appHandler))
                             throw new Exception($"No application handler for: {env.CommandType}");

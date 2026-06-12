@@ -7,7 +7,7 @@ using System.Text;
 
 namespace Server.PacketHandlers.Protocol
 {
-    public class PublicKeyHandler(ConnectionManager connections) : IProtocolPacketHandler
+    public class PublicKeyHandler(ConnectionManager connections, RSA serverRsa, Logger logger) : IProtocolPacketHandler
     {
         public ProtocolSICmdType CommandType => ProtocolSICmdType.PUBLIC_KEY;
 
@@ -17,6 +17,19 @@ namespace Server.PacketHandlers.Protocol
             string clientPublicKeyString = Encoding.UTF8.GetString(payload);
             using RSA clientRsa = RSA.Create();
             clientRsa.ImportRSAPublicKey(Convert.FromBase64String(clientPublicKeyString), out _);
+            logger.Log("[Public Key] Successfully read the client's public key", true);
+
+
+            // Server's public key
+            string serverPublicKeyString = Convert.ToBase64String(serverRsa.ExportRSAPublicKey());
+            byte[] serverPublicKeyBytes = Encoding.UTF8.GetBytes(serverPublicKeyString);
+
+            // Send the server's public key back to the client
+            ProtocolSI publicKeyProtocol = new();
+            byte[] pubKeyPacket = publicKeyProtocol.Make(ProtocolSICmdType.PUBLIC_KEY, serverPublicKeyBytes);
+            await client.GetStream().WriteAsync(pubKeyPacket);
+            logger.Log("[Public Key] Sending server's public key...", true);
+
 
             // Generate AES key and IV, encrypt them with the client's public key, and send them back
             (byte[] aesKey, byte[] aesIV) = AesUtils.GenerateKey();
@@ -29,6 +42,7 @@ namespace Server.PacketHandlers.Protocol
             ProtocolSI protocol = new();
             byte[] packet = protocol.Make(ProtocolSICmdType.SECRET_KEY, encryptedKey);
             await client.GetStream().WriteAsync(packet);
+            logger.Log("[Private Key] Sending secret key to client...");
         }
 
         private static byte[] CombineKeyAndIv(byte[] key, byte[] iv)
