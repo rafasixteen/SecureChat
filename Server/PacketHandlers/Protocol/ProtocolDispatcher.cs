@@ -12,6 +12,9 @@ namespace Server.PacketHandlers.Protocol
             _handlers = handlers.ToDictionary(h => h.CommandType, h => (IPacketHandler)h);
         }
 
+        /// <summary>
+        /// Triggers events based on communication type
+        /// </summary>
         public async Task DispatchAsync(TcpClient client, ProtocolSICmdType commandType, byte[] data)
         {
             if (!_handlers.TryGetValue(commandType, out IPacketHandler? handler))

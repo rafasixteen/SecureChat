@@ -23,6 +23,9 @@ namespace Client.Transport
         private Task _listenerTask = Task.CompletedTask;
         private CancellationTokenSource? _listenerCts;
 
+        public RSA? ClientRsa { get; private set; }
+        public byte[]? ServerPublicKeyBytes { get; private set; }
+
         private byte[]? _aesKey;
         private byte[]? _aesIv;
 
@@ -114,34 +117,34 @@ namespace Client.Transport
 
         #region Handshake
 
-        public RSA? ClientRsa { get; private set; }
-        public byte[]? ServerPublicKeyBytes { get; private set; }
-
+        /// <summary>
+        /// Performs the RSA/AES handshake with the server. Must be connected first.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">Thrown if not connected or if handshake fails.</exception>
         public async Task PerformHandshakeAsync()
         {
             EnsureConnected();
 
-            // Gerar chave pública do cliente
+            // Generate a new RSA key pair for this session
             ClientRsa = RSA.Create();
             string publicKey = Convert.ToBase64String(ClientRsa.ExportRSAPublicKey());
 
             byte[] publicBytes = Encoding.UTF8.GetBytes(publicKey);
 
-            // Enviar chave pública para o servidor
+            // Send the public key to the server
             byte[] publicPacket = _protocol.Make(ProtocolSICmdType.PUBLIC_KEY, publicBytes);
             await _stream!.WriteAsync(publicPacket).ConfigureAwait(false);
 
+            // Get the server's public key + AES parameters
             string serverPublicKeyString = await ReceiveServerPublicKeyAsync().ConfigureAwait(false);
             ServerPublicKeyBytes = Convert.FromBase64String(serverPublicKeyString);
 
             await _stream!.ReadExactlyAsync(_protocol.Buffer.AsMemory(0, 3)).ConfigureAwait(false);
 
+            // Parse the AES key and IV from the server's response
             int dataLength = _protocol.GetDataLength();
-
             if (dataLength > 0)
-            {
                 await _stream.ReadExactlyAsync(_protocol.Buffer.AsMemory(3, dataLength)).ConfigureAwait(false);
-            }
 
             if (_protocol.GetCmdType() != ProtocolSICmdType.SECRET_KEY)
                 throw new InvalidOperationException($"Expected SECRET_KEY response but got {_protocol.GetCmdType()}");
@@ -152,6 +155,11 @@ namespace Client.Transport
             (_aesKey, _aesIv) = SplitKeyAndIv(decryptedAes);
         }
 
+        /// <summary>
+        /// Receives and returns the server's public key string. Throws if the response is invalid.
+        /// </summary>
+        /// <param name="data"> The raw data bytes from the server's response, used for error reporting if parsing fails.</param>
+        /// <returns> The server's public key as a base64 string.</returns>
         private static (byte[] key, byte[] iv) SplitKeyAndIv(byte[] data)
         {
             int keySize = 32;
@@ -163,15 +171,23 @@ namespace Client.Transport
             return (key, iv);
         }
 
+        /// <summary>
+        /// Receives the server's public key response and extracts the key string. Throws if the response is invalid.
+        /// </summary>
+        /// <returns> The server's public key as a base64 string.</returns>
+        /// <exception cref="IOException"> Thrown if the server's response is malformed or indicates an error.</exception>
+        /// <exception cref="InvalidOperationException"> Thrown if the server's response is not a PUBLIC_KEY command.</exception>
         private async Task<string> ReceiveServerPublicKeyAsync()
         {
             int bytesRead = await _stream!.ReadAsync(_protocol.Buffer).ConfigureAwait(false);
 
+            // Ensure we got a valid response
             if (bytesRead == 0)
                 throw new IOException("Disconnected before receiving public key.");
 
             ProtocolSICmdType cmdType = _protocol.GetCmdType();
 
+            // If the command is an unexpected response, throw an error
             if (cmdType != ProtocolSICmdType.PUBLIC_KEY)
                 throw new InvalidOperationException($"Expected {ProtocolSICmdType.PUBLIC_KEY}, got {cmdType}");
 
@@ -182,6 +198,11 @@ namespace Client.Transport
 
         #region Send
 
+        /// <summary>
+        /// Sends a command with optional data to the server. Data will be encrypted if the handshake is complete.
+        /// </summary>
+        /// <param name="commandType"> The command type to send.</param>
+        /// <param name="payload"> Optional data payload to include with the command. Can be null or empty.</param>
         public async Task SendPacketAsync(ProtocolSICmdType commandType, byte[] payload)
         {
             EnsureConnected();
@@ -193,16 +214,21 @@ namespace Client.Transport
 
             await _sendLock.WaitAsync().ConfigureAwait(false);
 
+            // Send the packet, then release the lock immediately after to allow other sends to proceed while we wait for the network.
             try
             {
                 await _stream!.WriteAsync(packet).ConfigureAwait(false);
             }
-            finally
-            {
+            finally {
                 _sendLock.Release();
             }
         }
 
+        /// <summary>
+        /// Gets the AES key and IV, throwing an exception if they are not available (i.e. handshake not complete).
+        /// </summary>
+        /// <param name="commandType"> The command type to send.</param>
+        /// <param name="payload"> The raw data to send. Will be encrypted before sending.</param>
         public async Task SendPacketAsync(string commandType, byte[] payload)
         {
             byte[] signature = ClientRsa!.SignData(payload, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
@@ -217,8 +243,12 @@ namespace Client.Transport
 
         #region Listener
 
+        /// <summary>
+        /// Starts the listener loop that continuously reads packets from the server and raises events. Should be called after a successful handshake.
+        /// </summary>
         public void StartListening()
         {
+            // Make sure the client and the server are connected
             EnsureConnected();
             GetKeys();
 
@@ -229,6 +259,10 @@ namespace Client.Transport
             _listenerTask = Task.Run(() => ListenLoopAsync(_listenerCts.Token));
         }
 
+        /// <summary>
+        /// Stops the listener loop and cancels any pending reads. Should be called before disconnecting.
+        /// </summary>
+        /// <param name="token"> A cancellation token to use for waiting for the listener to stop. Should have a reasonable timeout to avoid hanging indefinitely.</param>
         private async Task ListenLoopAsync(CancellationToken token)
         {
             (byte[] aesKey, byte[] aesIv) = GetKeys();
@@ -237,10 +271,12 @@ namespace Client.Transport
             {
                 while (!token.IsCancellationRequested)
                 {
+                    // Read the packet header (3 bytes)
                     await _stream!.ReadExactlyAsync(_protocol.Buffer.AsMemory(0, 3), token).ConfigureAwait(false);
 
                     int dataLength = _protocol.GetDataLength();
 
+                    // Read the packet data based on the length specified in the header
                     if (dataLength > 0)
                         await _stream.ReadExactlyAsync(_protocol.Buffer.AsMemory(3, dataLength), token).ConfigureAwait(false);
 
@@ -251,21 +287,21 @@ namespace Client.Transport
                     {
                         Envelope env = Serializer.Deserialize<Envelope>(decrypted);
 
+                        // Verify the signature before raising the event
                         if (env.Signature == null || ServerPublicKeyBytes == null)
-                        {
                             throw new Exception("Message Rejected: Missing signature or public key.");
-                        }
 
+                        // Verify the signature using the server's public key
                         using RSA serverRSA = RSA.Create();
                         serverRSA.ImportRSAPublicKey(ServerPublicKeyBytes, out _);
 
                         bool isAuthentic = serverRSA.VerifyData(env.Payload, env.Signature, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
 
+                        // If the signature is invalid, reject the message and do not raise the event
                         if (!isAuthentic)
-                        {
                             throw new Exception("Message Rejected: Signature verification failed.");
-                        }
 
+                        // Throw an error if the command type is not a valid string command
                         if (!_applicationHandlers.TryGetValue(env.CommandType, out PacketHandler? appHandler))
                             throw new Exception($"No application handler for: {env.CommandType}");
 
@@ -273,6 +309,7 @@ namespace Client.Transport
                     }
                     else
                     {
+                        // Throw an error if the command type is not a valid non-data command
                         if (!_protocolHandlers.TryGetValue(commandType, out PacketHandler? protocolHandler))
                             throw new Exception($"No protocol handler for: {commandType}");
 
@@ -294,28 +331,51 @@ namespace Client.Transport
 
         #region Handlers
 
+        /// <summary>
+        /// Registers a handler for a specific protocol command type. Protocol handlers are used for handling commands that are part of the handshake or other internal client operations, and are not intended to be used by application code.
+        /// </summary>
+        /// <param name="commandType"> The protocol command type to handle.</param>
+        /// <param name="handler"> The handler to invoke when a packet with the specified command type is received. The handler will receive the decrypted payload as a byte array.</param>
+        /// <exception cref="InvalidOperationException"> Thrown if a handler is already registered for the specified command type.</exception>
         public void On(ProtocolSICmdType commandType, PacketHandler handler)
         {
             if (!_protocolHandlers.TryAdd(commandType, handler))
                 throw new InvalidOperationException($"Protocol handler for {commandType} already exists.");
         }
 
+        /// <summary>
+        /// Registers an application-level handler for a specific command type. These handlers will be invoked for decrypted messages that have been verified as authentic.
+        /// </summary>
+        /// <param name="commandType"> The command type to handle. This is an application-level identifier and can be any string, but should be unique across your application.</param>
+        /// <param name="handler"> The handler to invoke when a message with the specified command type is received. The handler will receive the decrypted payload as a byte array.</param>
+        /// <exception cref="InvalidOperationException"> Thrown if a handler for the specified command type is already registered.</exception>
         public void On(string commandType, PacketHandler handler)
         {
             if (!_applicationHandlers.TryAdd(commandType, handler))
                 throw new InvalidOperationException($"Application handler for {commandType} already exists.");
         }
 
+        /// <summary>
+        /// Removes a previously registered handler for a protocol command type.
+        /// </summary>
+        /// <param name="commandType"> The protocol command type whose handler should be removed.</param>
         public void RemoveHandler(ProtocolSICmdType commandType)
         {
             _protocolHandlers.TryRemove(commandType, out _);
         }
 
+        /// <summary>
+        /// Removes an application handler for the specified command type. Should be called when the handler is no longer needed to prevent memory leaks.
+        /// </summary>
+        /// <param name="commandType"> The command type whose handler should be removed.</param>
         public void RemoveHandler(string commandType)
         {
             _applicationHandlers.TryRemove(commandType, out _);
         }
 
+        /// <summary>
+        /// Removes all protocol and application handlers. Useful for resetting state between connections or tests.
+        /// </summary>
         public void ClearHandlers()
         {
             _protocolHandlers.Clear();
@@ -326,6 +386,9 @@ namespace Client.Transport
 
         #region IAsyncDisposable
 
+        /// <summary>
+        /// Asynchronously disposes the client, ensuring the connection is closed and resources are cleaned up. Should be called when the client is no longer needed.
+        /// </summary>
         public async ValueTask DisposeAsync()
         {
             await DisconnectAsync().ConfigureAwait(false);
@@ -338,26 +401,27 @@ namespace Client.Transport
 
         #region Helpers
 
+        /// <summary>
+        /// Ensures that the client is currently connected to the server. Throws an exception if not.
+        /// </summary>
+        /// <exception cref="InvalidOperationException"> Thrown if the client is not connected.</exception>
         private void EnsureConnected()
         {
             if (!IsConnected || _stream == null)
                 throw new InvalidOperationException("Not connected. Call ConnectAsync first.");
         }
 
+        /// <summary>
+        /// Gets the AES key and IV from the handshake, throwing an exception if they are not available (i.e. handshake not complete).
+        /// </summary>
+        /// <returns></returns>
+        /// <exception cref="InvalidOperationException"> Thrown if the AES key or IV are not available.</exception>
         private (byte[] aesKey, byte[] aesIv) GetKeys()
         {
             if (_aesKey == null || _aesIv == null)
                 throw new InvalidOperationException("Handshake not completed.");
 
             return (_aesKey, _aesIv);
-        }
-
-        private static byte[] CombineKeyAndIv(byte[] key, byte[] iv)
-        {
-            byte[] result = new byte[key.Length + iv.Length];
-            Buffer.BlockCopy(key, 0, result, 0, key.Length);
-            Buffer.BlockCopy(iv, 0, result, key.Length, iv.Length);
-            return result;
         }
 
         #endregion

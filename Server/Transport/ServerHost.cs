@@ -17,6 +17,9 @@ namespace Server.Transport
     {
         private const int PORT = 8080;
 
+        /// <summary>
+        /// Corre o programa principal do servidor
+        /// </summary>
         public async Task RunAsync(CancellationToken cancellationToken)
         {
             TcpListener listener = new(IPAddress.Any, PORT);
@@ -29,6 +32,7 @@ namespace Server.Transport
 
             try
             {
+                // While there isn't a cancelation token, run the TCP Client
                 while (!cancellationToken.IsCancellationRequested)
                 {
                     TcpClient client = await listener.AcceptTcpClientAsync(cancellationToken);
@@ -48,6 +52,7 @@ namespace Server.Transport
                 logger.Log("Server stopped.", true);
             }
         }
+
 
         private async Task HandleClientAsync(TcpClient client, CancellationToken cancellationToken)
         {
@@ -70,14 +75,20 @@ namespace Server.Transport
             }
         }
 
+        /// <summary>
+        /// Receives all information being sent by the client in a loop
+        /// </summary>
         private async Task ReceiveLoopAsync(TcpClient client, ProtocolSI protocol, NetworkStream stream, CancellationToken cancellationToken)
         {
             while (client.Connected && !cancellationToken.IsCancellationRequested)
             {
+                // Reads the head of the packet
                 await stream.ReadExactlyAsync(protocol.Buffer.AsMemory(0, 3), cancellationToken).ConfigureAwait(false);
 
+                // Get's the total length of the packet
                 int dataLength = protocol.GetDataLength();
 
+                // If it's bigger than 0, read the rest
                 if (dataLength > 0)
                     await stream.ReadExactlyAsync(protocol.Buffer.AsMemory(3, dataLength), cancellationToken).ConfigureAwait(false);
 

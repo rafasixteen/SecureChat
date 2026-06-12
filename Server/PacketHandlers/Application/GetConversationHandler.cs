@@ -23,6 +23,11 @@ namespace Server.PacketHandlers.Application
         // safe and leave room for encryption overhead and JSON serialization.
         private const int MaxPacketSize = 512;
 
+        /// <summary>
+        /// Handles a request to get a conversation's messages. The client must be a member of the conversation.
+        /// </summary>
+        /// <param name="client"> The client requesting the conversation. Must be authenticated. </param>
+        /// <param name="payload"> The payload is expected to be a JSON string containing the conversation ID and the number of messages to retrieve.</param>
         public async Task HandleAsync(TcpClient client, byte[] payload)
         {
             if (!connections.IsAuthenticated(client))
@@ -65,6 +70,7 @@ namespace Server.PacketHandlers.Application
 
             List<MessageResponse> messageResponses = new();
 
+            // For each message, encrypt the content and create a MessageResponse DTO
             foreach (Message m in messages)
             {
                 string decryptedText = m.Content;
@@ -95,6 +101,7 @@ namespace Server.PacketHandlers.Application
             int packetIndex = 0;
             int totalSent = 0;
 
+            // We need to split the messages into multiple packets if the total size exceeds MaxPacketSize
             for (int i = 0; i < messageResponses.Count; i++)
             {
                 byte[] messageBytes = Serializer.Serialize(messageResponses[i]);
@@ -130,6 +137,11 @@ namespace Server.PacketHandlers.Application
             logger.Log($"[GetConversation] Done. Sent {totalSent}/{messageResponses.Count} messages in {packetIndex + 1} packets.", true);
         }
 
+        /// <summary>
+        /// Sends a chunk of messages to the client. The messages are serialized into a GetConversationResponse DTO before sending.
+        /// </summary>
+        /// <param name="client"> The client to send the messages to. </param>
+        /// <param name="messages"> The messages to send in this chunk. </param>
         private async Task SendChunk(TcpClient client, List<MessageResponse> messages)
         {
             await sender.SendAsync(client, "get-conversation-chunk", new GetConversationResponse(messages));

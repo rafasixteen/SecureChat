@@ -4,11 +4,16 @@ using Server.Extentions;
 using Server.Transport;
 using Server.Data;
 using System.Security.Cryptography;
+using Microsoft.EntityFrameworkCore;
 
 namespace Server
 {
     internal static class Program
     {
+        /// <summary>
+        /// The main entry point for the server application.
+        /// </summary>
+        /// <exception cref="Exception"> Thrown when required configuration values are missing. </exception>
         public static async Task Main(string[] args)
         {
             IConfiguration config = new ConfigurationBuilder()
@@ -30,6 +35,13 @@ namespace Server
             services.AddSingleton<RSA>(sp => RSA.Create());
 
             ServiceProvider provider = services.BuildServiceProvider();
+
+            // Create database and apply migrations
+            using (IServiceScope scope = provider.CreateScope())
+            {
+                AppDbContext dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                await dbContext.Database.MigrateAsync();
+            }
 
             using CancellationTokenSource cts = new();
 

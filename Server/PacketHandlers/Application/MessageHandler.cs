@@ -21,6 +21,12 @@ namespace Server.PacketHandlers.Application
 
         private const int MaxMessageLength = 256;
 
+        /// <summary>
+        /// Handles the management of messages
+        /// </summary>
+        /// <param name="client"></param>
+        /// <param name="payload"></param>
+        /// <returns></returns>
         public async Task HandleAsync(TcpClient client, byte[] payload)
         {
             if (!connections.IsAuthenticated(client))
@@ -30,17 +36,21 @@ namespace Server.PacketHandlers.Application
                 return;
             }
 
+            // Create a message request instance
             SendMessageRequest request = Serializer.Deserialize<SendMessageRequest>(payload);
             string username = connections.GetUsername(client);
 
+            // Find both users
             User senderUser = await db.Users.FirstAsync(u => u.Username == username);
             User receiverUser = await db.Users.FirstAsync(u => u.Username == request.FriendUsername);
 
+            // Encrypt message
             byte[] textBytes = Encoding.UTF8.GetBytes(request.Message.Length > MaxMessageLength ? request.Message.Substring(0, MaxMessageLength) : request.Message);
             byte[] encryptedBytes = AesUtils.Encrypt(textBytes, dbKeys.Key, dbKeys.Iv);
 
             var messageContents = Convert.ToBase64String(encryptedBytes);
-
+            
+            // add the encrypted message to the database
             db.Messages.Add(new Message
             {
                 SenderId = senderUser.Id,
@@ -53,6 +63,7 @@ namespace Server.PacketHandlers.Application
 
             logger.Log($"Message sent from {senderUser.Username} to {receiverUser.Username}");
 
+            // Send the message
             await sender.SendAsync(client, "send-message-success", "Message sent successfully.");
 
             TcpClient? receiverClient = connections.GetClientByUsername(request.FriendUsername);
