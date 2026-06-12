@@ -19,9 +19,13 @@ namespace Server.Transport.Connection
 
         public void Disconnect(TcpClient client)
         {
-            logger.Log($"Client disconnected: {client.Client.RemoteEndPoint}", true);
+            if (!ConnectedClients.TryRemove(client, out _))
+                return;
 
-            ConnectedClients.TryRemove(client, out _);
+            string endpoint = client.Client?.RemoteEndPoint?.ToString() ?? "Unkown Endpoint";
+
+            logger.Log($"Client disconnected: {endpoint}", true);
+
             client.Close();
         }
 

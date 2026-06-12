@@ -2,6 +2,7 @@ using Client.Forms;
 using Client.State;
 using Client.Transport;
 using Microsoft.Extensions.DependencyInjection;
+using System.Formats.Tar;
 
 namespace Client
 {
@@ -55,7 +56,25 @@ namespace Client
             context.MainForm = next;
 
             next.Show();
-            previous?.Close();
+
+            // Prevent Navigation to close the Chat Form
+            // Note: ChatForm holds the connection to the server, if it closes, the connection is severed
+            if (previous is not ChatForm)
+                previous?.Close();
+        }
+
+        public static void SwitchDialog<TNext>(IServiceProvider provider, Form current) where TNext : Form
+        {
+            TNext next = provider.GetRequiredService<TNext>();
+
+            // Hides the current Form
+            current.Hide();
+
+            // Shows the next one
+            next.ShowDialog();
+
+            // Closes the current one
+            current.Close();
         }
     }
 }

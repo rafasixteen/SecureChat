@@ -57,10 +57,7 @@ namespace Server.Transport
 
             try
             {
-                logger.Log($"Handshake started with client: {client.Client.RemoteEndPoint}", true);
-                await Handshake.SendPublicKey(client, rsa);
-
-                logger.Log($"Handshake completed with client: {client.Client.RemoteEndPoint}", true);
+                logger.Log($"Client connected: {client.Client.RemoteEndPoint}", true);
                 await ReceiveLoopAsync(client, protocol, stream, cancellationToken);
             }
             catch (Exception ex)
