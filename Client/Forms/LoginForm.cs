@@ -26,7 +26,7 @@ namespace Client.Forms
         #region Control Event Handlers
 
         /// <summary>
-        /// Handles the Click event of the login button. Validates user input and initiates the login process.
+        /// Handles the load event of the login form, configures handlers
         /// </summary>
         private void LoginForm_Load(object sender, EventArgs e)
         {
@@ -35,7 +35,7 @@ namespace Client.Forms
         }
 
         /// <summary>
-        /// Handles the Click event of the login button. Validates user input and initiates the login process.
+        /// Handles the close event of the login form, removes handlers
         /// </summary>
         private void LoginForm_FormClosing(object sender, FormClosingEventArgs e)
         {
