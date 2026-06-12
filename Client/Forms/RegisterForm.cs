@@ -26,18 +26,27 @@ namespace Client.Forms
 
         #region Control Event Handlers
 
+        /// <summary>
+        /// Handles the form load event of the register form, configures events
+        /// </summary>
         private void RegisterForm_Load(object sender, EventArgs e)
         {
             _connection.On("register-success", OnRegisterSuccess);
             _connection.On("register-failed", OnRegistrationFailed);
         }
 
+        /// <summary>
+        /// Handles the Form Closing event of the register form, removes events
+        /// </summary>
         private void RegisterForm_FormClosing(object sender, FormClosingEventArgs e)
         {
             _connection.RemoveHandler("register-success");
             _connection.RemoveHandler("register-failed");
         }
 
+        /// <summary>
+        /// Handles the Click event of the register button. Validates user input and sends a registration request to the server.
+        /// </summary>
         private async void ButtonRegister_Click(object sender, EventArgs e)
         {
             string username = _usernameTextBox.Text.Trim();
@@ -60,6 +69,9 @@ namespace Client.Forms
             await _connection.SendRegistrationPacketAsync(username, password);
         }
 
+        /// <summary>
+        /// Handles the Click event of the back button. Navigates back to the login form.
+        /// </summary>
         private void HaveAccountLinkLabel_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
         {
             RegisterForm_FormClosing(sender, new FormClosingEventArgs(CloseReason.UserClosing, false));
@@ -70,6 +82,10 @@ namespace Client.Forms
 
         #region Packet Handlers
 
+        /// <summary>
+        /// Handles the "register-success" packet from the server. Displays a success message and navigates to the login form.
+        /// </summary>
+        /// <param name="data"> The data received from the server, expected to be a RegisterSuccessDTO.</param>
         private void OnRegisterSuccess(byte[] data)
         {
             Invoke(() =>
@@ -80,6 +96,10 @@ namespace Client.Forms
             });
         }
 
+        /// <summary>
+        /// Handles the "register-failed" packet from the server. Displays an error message with the reason for registration failure.
+        /// </summary>
+        /// <param name="data"> The data received from the server, expected to be a RegisterFailedDTO.</param>
         private void OnRegistrationFailed(byte[] data)
         {
             Invoke(() =>

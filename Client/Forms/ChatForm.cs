@@ -32,6 +32,11 @@ namespace Client.Forms
 
         #region Control Event Handlers
 
+        /// <summary>
+        /// Handles the Load event of the form. Initializes the connection and starts listening for messages.
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
         private async void ChatForm_Load(object sender, EventArgs e)
         {
             _friendsList.DrawMode = DrawMode.OwnerDrawFixed;
@@ -48,6 +53,7 @@ namespace Client.Forms
                 }
             };
 
+            // Assign event handlers
             _appState.Username.ValueChanged += OnUsernameChanged;
             _appState.LoggedIn += OnLoggedIn;
             _appState.LoggedOut += OnLoggedOut;
@@ -61,12 +67,18 @@ namespace Client.Forms
             }
         }
 
+        /// <summary>
+        /// Handles the FormClosing event of the form. Disconnects from the server and cleans up resources.
+        /// </summary>
         private async void ChatForm_FormClosing(object sender, FormClosingEventArgs e)
         {
             _appState.Logout();
             await DisconnectAsync();
         }
 
+        /// <summary>
+        /// Handles the SelectedIndexChanged event of the friends list. Updates the current chat partner.
+        /// </summary>
         private async void FriendsList_SelectedIndexChanged(object sender, EventArgs e)
         {
             if (_friendsList.SelectedItem is Friend friend)
@@ -77,6 +89,9 @@ namespace Client.Forms
             }
         }
 
+        /// <summary>
+        /// Handles the Click event of the send button. Sends the message to the current chat partner.
+        /// </summary>
         private async void SendButton_Click(object sender, EventArgs e)
         {
             string message = _messageTextBox.Text.Trim();
@@ -109,6 +124,9 @@ namespace Client.Forms
             await _connection.SendMessage(friend.Username, message);
         }
 
+        /// <summary>
+        /// Handles the Press event of a key, when a enter key is pressed in the message text box. Triggers the send button click event.
+        /// </summary>
         private void MessageTextBox_KeyPress(object sender, KeyPressEventArgs e)
         {
             if (e.KeyChar == (char)Keys.Enter && _messageTextBox.Focused)
@@ -118,6 +136,9 @@ namespace Client.Forms
             }
         }
 
+        /// <summary>
+        /// Handles the Click event of the logout button. Logs the user out and navigates back to the login form.
+        /// </summary>
         private async void AuthButton_Click(object sender, EventArgs e)
         {
             if (_appState.IsLoggedIn)
@@ -189,6 +210,10 @@ namespace Client.Forms
 
         #region Packet Handlers
 
+        /// <summary>
+        /// Handles the FriendListPacket received from the server. Updates the friends list in the UI.
+        /// </summary>
+        /// <param name="data"> The packet data containing the list of friends.</param>
         private void OnFriendsListReceived(byte[] data)
         {
             Invoke(() =>
@@ -204,6 +229,10 @@ namespace Client.Forms
             });
         }
 
+        /// <summary>
+        /// Handles the FriendsListRejectionPacket received from the server. Displays an error message to the user.
+        /// </summary>
+        /// <param name="data"> The packet data containing the rejection reason.</param>
         private void OnFriendsListRejected(byte[] data)
         {
             Invoke(() =>
@@ -213,6 +242,10 @@ namespace Client.Forms
             });
         }
 
+        /// <summary>
+        /// Handles the ConversationPacket received from the server. Updates the current chat partner and displays the conversation history.
+        /// </summary>
+        /// <param name="data"> The packet data containing the conversation details.</param>
         private void OnGetConversationChunk(byte[] data)
         {
             Invoke(() =>
@@ -225,6 +258,10 @@ namespace Client.Forms
             });
         }
 
+        /// <summary>
+        /// Handles the ConversationFailed packet
+        /// </summary>
+        /// <param name="data"></param>
         private void OnGetConversationFailed(byte[] data)
         {
             Invoke(() =>
@@ -239,6 +276,9 @@ namespace Client.Forms
             /* no-op */
         }
 
+        /// <summary>
+        /// Handles the failure to send a message
+        /// </summary>
         private void OnSendMessageFailed(byte[] data)
         {
             Invoke(() =>
@@ -249,7 +289,10 @@ namespace Client.Forms
                 // TODO: Remove or mark failed message in the chat panel.
             });
         }
-
+        
+        /// <summary>
+        /// Handles messages received
+        /// </summary>
         private void OnMessageReceived(byte[] data)
         {
             Invoke(() =>
@@ -264,6 +307,9 @@ namespace Client.Forms
             });
         }
 
+        /// <summary>
+        /// Handles server failure
+        /// </summary>
         private void OnServerFailed(byte[] data)
         {
             Invoke(() =>
@@ -276,7 +322,10 @@ namespace Client.Forms
         #endregion
 
         #region App State Events
-
+        
+        /// <summary>
+        /// Configures events when the user logs in
+        /// </summary>
         private async void OnLoggedIn()
         {
             _authButton.Text = "Logout";
@@ -297,6 +346,9 @@ namespace Client.Forms
             await _connection.RequestFriendsList();
         }
 
+        /// <summary>
+        /// Clears events when the user logs out
+        /// </summary>
         public async void OnLoggedOut()
         {
             _connection.ClearHandlers();
@@ -305,11 +357,17 @@ namespace Client.Forms
             ClearMessages();
         }
 
+        /// <summary>
+        /// Handles the user's username change
+        /// </summary>
         private void OnUsernameChanged(string? username)
         {
             _usernameLabel.Text = username != null ? $"Logged in as: {username}" : "Not logged in";
         }
 
+        /// <summary>
+        /// Handles the event of the friends list change
+        /// </summary>
         private void OnFriendsListChanged(object? sender, ListChangedEventArgs e)
         {
             _friendsList.DataSource = null;
@@ -321,6 +379,12 @@ namespace Client.Forms
 
         #region UI Helpers
 
+        /// <summary>
+        /// Adds messages to the layout panel
+        /// </summary>
+        /// <param name="text">Text of the message</param>
+        /// <param name="sentAt">When the message was sent</param>
+        /// <param name="senderUsername">Who sent the message</param>
         private void AddMessage(string text, DateTime sentAt, string senderUsername)
         {
             bool isReceived = senderUsername != _appState.Username.Value;
@@ -363,6 +427,9 @@ namespace Client.Forms
 
             container.Controls.Add(bubble);
 
+            /// <summary>
+            /// Position the text bubble accordingly
+            /// </summary>
             void PositionBubble()
             {
                 container.Width = _chatPanel.ClientSize.Width - 20;
@@ -375,11 +442,18 @@ namespace Client.Forms
             _chatPanel.ScrollControlIntoView(container);
         }
 
+        /// <summary>
+        /// Clears all messages
+        /// </summary>
         private void ClearMessages()
         {
             _chatPanel.Controls.Clear();
         }
 
+        /// <summary>
+        /// Increments the notification count for users who sent the message to the current user
+        /// </summary>
+        /// <param name="friendUsername">Which friend sent the message</param>
         private void IncrementNotificationCount(string friendUsername)
         {
             Friend? friend = _appState.FriendUsernames.FirstOrDefault(f => f.Username == friendUsername);
@@ -391,6 +465,10 @@ namespace Client.Forms
             }
         }
 
+        /// <summary>
+        /// Clear notification count for a specified friend
+        /// </summary>
+        /// <param name="friendUsername">What friend to clear the notification counter</param>
         private void ClearNotificationCount(string friendUsername)
         {
             Friend? friend = _appState.FriendUsernames.FirstOrDefault(f => f.Username == friendUsername);

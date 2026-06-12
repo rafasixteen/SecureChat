@@ -8,6 +8,11 @@ namespace Server.Extentions
 {
     public static class InfrastructureServiceExtensions
     {
+        /// <summary>
+        /// Adds core infrastructure services like connection management, packet sending, and the server host.
+        /// </summary>
+        /// <param name="services"> The service collection to add to.</param>
+        /// <returns>Itself updated.</returns>
         public static IServiceCollection AddServerInfrastructure(this IServiceCollection services)
         {
             services.AddSingleton<ServerHost>();

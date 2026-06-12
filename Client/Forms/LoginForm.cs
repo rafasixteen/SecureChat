@@ -25,18 +25,27 @@ namespace Client.Forms
 
         #region Control Event Handlers
 
+        /// <summary>
+        /// Handles the Click event of the login button. Validates user input and initiates the login process.
+        /// </summary>
         private void LoginForm_Load(object sender, EventArgs e)
         {
             _connection.On("login-success", OnLoginSuccess);
             _connection.On("login-failed", OnLoginFailed);
         }
 
+        /// <summary>
+        /// Handles the Click event of the login button. Validates user input and initiates the login process.
+        /// </summary>
         private void LoginForm_FormClosing(object sender, FormClosingEventArgs e)
         {
             _connection.RemoveHandler("login-success");
             _connection.RemoveHandler("login-failed");
         }
 
+        /// <summary>
+        /// Handles the Click event of the login button. Validates user input and initiates the login process.
+        /// </summary>
         private async void LoginButton_Click(object sender, EventArgs e)
         {
             string username = _textBoxUsername.Text;
@@ -52,6 +61,9 @@ namespace Client.Forms
             await _connection.SendLoginPacketAsync(username, password);
         }
 
+        /// <summary>
+        /// Handles the Click event of the register button. Opens the registration form.
+        /// </summary>
         private void CreateAccountLinkLabel_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
         {
             LoginForm_FormClosing(sender, new FormClosingEventArgs(CloseReason.UserClosing, false));
@@ -62,6 +74,10 @@ namespace Client.Forms
 
         #region Packet Handlers
 
+        /// <summary>
+        /// Handles the "login-success" packet from the server. Updates the application state and transitions to the main form.
+        /// </summary>
+        /// <param name="data"> The data received from the server, expected to be a LoginSuccessDTO.</param>
         private void OnLoginSuccess(byte[] data)
         {
             Invoke(() =>
@@ -72,6 +88,10 @@ namespace Client.Forms
             });
         }
 
+        /// <summary>
+        /// Handles the "login-failed" packet from the server. Displays an error message to the user.
+        /// </summary>
+        /// <param name="data"> The data received from the server, expected to be a LoginFailedDTO.</param>
         private void OnLoginFailed(byte[] data)
         {
             Invoke(() =>

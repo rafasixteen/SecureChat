@@ -6,5 +6,6 @@ using System.Threading.Tasks;
 
 namespace Server.Data
 {
+    // Record type to hold the encryption settings for the database
     public record DbEncryptionSettings(byte[] Key, byte[] Iv);
 }

@@ -6,6 +6,11 @@ namespace Server.Extentions
 {
     public static class PacketHandlerServiceExtensions
     {
+        /// <summary>
+        /// Registers all packet handlers in the assembly.
+        /// </summary>
+        /// <param name="services"></param>
+        /// <returns></returns>
         public static IServiceCollection AddProtocolHandlers(this IServiceCollection services)
         {
             services.AddSingleton<ProtocolDispatcher>();
@@ -17,6 +22,11 @@ namespace Server.Extentions
             return services;
         }
 
+        /// <summary>
+        /// Registers all application packet handlers in the assembly.
+        /// </summary>
+        /// <param name="services"></param>
+        /// <returns></returns>
         public static IServiceCollection AddApplicationHandlers(this IServiceCollection services)
         {
             services.AddSingleton<ApplicationDispatcher>();

@@ -45,6 +45,10 @@ namespace Server.PacketHandlers.Protocol
             logger.Log("[Private Key] Sending secret key to client...");
         }
 
+        /// <summary>
+        /// Combina a chave e o IV num unico array de bytes
+        /// </summary>
+        /// <returns>Chave + IV</returns>
         private static byte[] CombineKeyAndIv(byte[] key, byte[] iv)
         {
             byte[] combined = new byte[key.Length + iv.Length];
