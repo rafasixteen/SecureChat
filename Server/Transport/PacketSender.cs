@@ -3,11 +3,12 @@ using Server.Transport.Connection;
 using Shared;
 using Shared.DTOs;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace Server.Transport
 {
-    public class PacketSender(ConnectionManager connectionManager) : IPacketSender
+    public class PacketSender(ConnectionManager connectionManager, RSA serverRsa) : IPacketSender
     {
         private readonly ConnectionManager _connectionManager = connectionManager;
 
@@ -19,7 +20,9 @@ namespace Server.Transport
 
         public async Task SendAsync(TcpClient client, string commandType, byte[] payload)
         {
-            Envelope env = new(commandType, payload);
+            byte[] signature = serverRsa.SignData(payload, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+
+            Envelope env = new(commandType, payload, signature);
             byte[] data = Serializer.Serialize(env);
             await SendAsync(client, ProtocolSICmdType.SYM_CIPHER_DATA, data);
         }

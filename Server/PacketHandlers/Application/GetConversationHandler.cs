@@ -3,8 +3,10 @@ using Server.Data;
 using Server.Data.Models;
 using Server.Transport;
 using Server.Transport.Connection;
+using Shared;
 using Shared.DTOs;
 using System.Net.Sockets;
+using System.Text;
 
 namespace Server.PacketHandlers.Application
 {
@@ -12,6 +14,7 @@ namespace Server.PacketHandlers.Application
         ConnectionManager connections,
         AppDbContext db,
         Logger logger,
+        DbEncryptionSettings dbKeys,
         IPacketSender sender) : IApplicationPacketHandler
     {
         public string CommandType => "get-conversation";
@@ -58,13 +61,33 @@ namespace Server.PacketHandlers.Application
                 .OrderBy(m => m.SentAt)
                 .ToListAsync();
 
-            List<MessageResponse> messageResponses = messages.Select(m => new MessageResponse(
-                m.Content,
-                m.SentAt,
-                m.Sender.Username
-            )).ToList();
 
-            logger.Log($"GetConversation: Found {messages.Count} messages between {username} and {friendUsername}.", true);
+
+            List<MessageResponse> messageResponses = new();
+
+            foreach (Message m in messages)
+            {
+                string decryptedText = m.Content;
+
+                try
+                {
+                    byte[] encryptedBytes = Convert.FromBase64String(m.Content);
+
+                    byte[] decryptedBytes = AesUtils.Decrypt(encryptedBytes, dbKeys.Key, dbKeys.Iv);
+
+                    decryptedText = Encoding.UTF8.GetString(decryptedBytes);
+                    
+                    logger.Log("[Decryption Success] Decrypted Message", true);
+                }
+                catch (Exception)
+                {
+                    logger.Log("[Decryption Fail] The Message Was likely unencrypted, the message will be sent without being decrypted.", true);
+                }
+
+                messageResponses.Add(new(decryptedText, m.SentAt, m.Sender.Username));
+            }
+
+            logger.Log($"[GetConversation] Found {messages.Count} messages between {username} and {friendUsername}.", true);
 
             List<MessageResponse> buffer = new();
             int currentSize = 0;

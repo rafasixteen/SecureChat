@@ -114,22 +114,53 @@ namespace Client.Transport
 
         #region Handshake
 
+        public RSA? ClientRsa { get; private set; }
+        public byte[]? ServerPublicKeyBytes { get; private set; }
+
         public async Task PerformHandshakeAsync()
         {
             EnsureConnected();
 
-            string publicKey = await ReceiveServerPublicKeyAsync().ConfigureAwait(false);
+            // Gerar chave pública do cliente
+            ClientRsa = RSA.Create();
+            string publicKey = Convert.ToBase64String(ClientRsa.ExportRSAPublicKey());
 
-            using RSA rsa = RSA.Create();
-            rsa.ImportRSAPublicKey(Convert.FromBase64String(publicKey), out _);
+            byte[] publicBytes = Encoding.UTF8.GetBytes(publicKey);
 
-            (_aesKey, _aesIv) = AesUtils.GenerateKey();
+            // Enviar chave pública para o servidor
+            byte[] publicPacket = _protocol.Make(ProtocolSICmdType.PUBLIC_KEY, publicBytes);
+            await _stream!.WriteAsync(publicPacket).ConfigureAwait(false);
 
-            byte[] keyAndIv = CombineKeyAndIv(_aesKey, _aesIv);
-            byte[] encryptedKey = rsa.Encrypt(keyAndIv, RSAEncryptionPadding.Pkcs1);
-            byte[] packet = _protocol.Make(ProtocolSICmdType.SECRET_KEY, encryptedKey);
+            string serverPublicKeyString = await ReceiveServerPublicKeyAsync().ConfigureAwait(false);
+            ServerPublicKeyBytes = Convert.FromBase64String(serverPublicKeyString);
 
-            await _stream!.WriteAsync(packet).ConfigureAwait(false);
+            await _stream!.ReadExactlyAsync(_protocol.Buffer.AsMemory(0, 3)).ConfigureAwait(false);
+
+            int dataLength = _protocol.GetDataLength();
+
+            if (dataLength > 0)
+            {
+                await _stream.ReadExactlyAsync(_protocol.Buffer.AsMemory(3, dataLength)).ConfigureAwait(false);
+            }
+
+            if (_protocol.GetCmdType() != ProtocolSICmdType.SECRET_KEY)
+                throw new InvalidOperationException($"Expected SECRET_KEY response but got {_protocol.GetCmdType()}");
+
+            byte[] encryptedAes = _protocol.GetData();
+            byte[] decryptedAes = ClientRsa.Decrypt(encryptedAes, RSAEncryptionPadding.Pkcs1);
+
+            (_aesKey, _aesIv) = SplitKeyAndIv(decryptedAes);
+        }
+
+        private static (byte[] key, byte[] iv) SplitKeyAndIv(byte[] data)
+        {
+            int keySize = 32;
+            int ivSize = 16;
+            byte[] key = new byte[keySize];
+            byte[] iv = new byte[ivSize];
+            Buffer.BlockCopy(data, 0, key, 0, keySize);
+            Buffer.BlockCopy(data, keySize, iv, 0, ivSize);
+            return (key, iv);
         }
 
         private async Task<string> ReceiveServerPublicKeyAsync()
@@ -174,7 +205,10 @@ namespace Client.Transport
 
         public async Task SendPacketAsync(string commandType, byte[] payload)
         {
-            Envelope env = new(commandType, payload);
+            byte[] signature = ClientRsa!.SignData(payload, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+
+            Envelope env = new(commandType, payload, signature);
+
             byte[] data = Serializer.Serialize(env);
             await SendPacketAsync(ProtocolSICmdType.SYM_CIPHER_DATA, data).ConfigureAwait(false);
         }
@@ -216,6 +250,21 @@ namespace Client.Transport
                     if (commandType == ProtocolSICmdType.SYM_CIPHER_DATA)
                     {
                         Envelope env = Serializer.Deserialize<Envelope>(decrypted);
+
+                        if (env.Signature == null || ServerPublicKeyBytes == null)
+                        {
+                            throw new Exception("Message Rejected: Missing signature or public key.");
+                        }
+
+                        using RSA serverRSA = RSA.Create();
+                        serverRSA.ImportRSAPublicKey(ServerPublicKeyBytes, out _);
+
+                        bool isAuthentic = serverRSA.VerifyData(env.Payload, env.Signature, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+
+                        if (!isAuthentic)
+                        {
+                            throw new Exception("Message Rejected: Signature verification failed.");
+                        }
 
                         if (!_applicationHandlers.TryGetValue(env.CommandType, out PacketHandler? appHandler))
                             throw new Exception($"No application handler for: {env.CommandType}");

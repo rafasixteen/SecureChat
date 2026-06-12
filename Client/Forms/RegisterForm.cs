@@ -62,7 +62,8 @@ namespace Client.Forms
 
         private void HaveAccountLinkLabel_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
         {
-            Program.NavigateTo<LoginForm>(_provider);
+            RegisterForm_FormClosing(sender, new FormClosingEventArgs(CloseReason.UserClosing, false));
+            Program.SwitchDialog<LoginForm>(_provider, this);
         }
 
         #endregion

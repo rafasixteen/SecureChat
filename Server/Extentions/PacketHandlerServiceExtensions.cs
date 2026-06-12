@@ -11,7 +11,7 @@ namespace Server.Extentions
             services.AddSingleton<ProtocolDispatcher>();
 
             services.AddSingleton<IProtocolPacketHandler, EotPacketHandler>();
-            services.AddSingleton<IProtocolPacketHandler, SecretKeyHandler>();
+            services.AddSingleton<IProtocolPacketHandler, PublicKeyHandler>();
             services.AddSingleton<IProtocolPacketHandler, SymmetricDataHandler>();
 
             return services;
